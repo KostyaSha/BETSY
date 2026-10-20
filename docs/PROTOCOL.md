@@ -153,6 +153,9 @@ not a claim about every Toyota battery. An invalid Gen2 count is never inferred 
 values or replaced with 10. Both standalone D0 and combined reads reject a count that differs
 from the monitor configuration before updating values.
 
+The counter reports measurement blocks, not electrochemical cells. The application does not
+multiply it by two to invent a cell count; the monitor and new capture metadata show blocks only.
+
 Block count `N` comes from the ECU rather than being assumed. The `N == 15` variant additionally
 tests for a split pack by comparing the first blocks against the last: a set reading above 18 V
 where the tail reads below indicates two differently-scaled halves. *Inferred*, and only

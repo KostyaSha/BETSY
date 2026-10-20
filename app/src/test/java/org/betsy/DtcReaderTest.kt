@@ -81,7 +81,6 @@ class DtcReaderTest {
             model = model,
             supported = true,
             blockCount = 14,
-            cellCount = 28,
         )
 
     @Test
@@ -402,6 +401,8 @@ class DtcReaderTest {
         assertEquals(listOf("HV ECU (7E2): P0AA6", "Battery ECU (7E2): P0A80"), capture.dtcs)
         assertEquals(result.rawResponses, capture.raw)
         assertEquals(listOf(612), capture.codes.map { it.code })
+        assertTrue(capture.car.contains("14 blocks"))
+        assertFalse(capture.car.contains("cells"))
     }
 
     @Test

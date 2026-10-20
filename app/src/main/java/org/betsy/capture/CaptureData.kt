@@ -38,7 +38,7 @@ data class CaptureData(
      * later against what that build actually did.
      */
     val build: String,
-    /** Detected generation and pack shape, e.g. "Gen2 (2004-2009) 14 blocks / 28 cells". */
+    /** Detected generation and pack shape, e.g. "Gen2 14 blocks". */
     val car: String,
     /** Adapter identity from the ELM327 banner. */
     val elm: String,
@@ -142,7 +142,7 @@ data class CaptureData(
             CaptureData(
                 version = version,
                 build = build,
-                car = "${info.model.label} ${info.blockCount} blocks / ${info.cellCount} cells",
+                car = "${info.model.label} ${info.blockCount} blocks",
                 elm = elm.ifBlank { "unknown" },
                 raw = result.rawResponses,
                 dtcs = result.groups.flatMap { g -> g.codes.map { "${g.label}: ${it.code}" } },

@@ -44,7 +44,6 @@ data class VehicleInfo(
     val model: VehicleModel,
     val supported: Boolean,
     val blockCount: Int,
-    val cellCount: Int,
     val fifteenBlockVariant: Boolean = false,
     val splitPack: Boolean = false,
     val badAdapter: Boolean = false,
@@ -88,7 +87,6 @@ object VehicleDetector {
                 supported = false,
                 captureOnly = true,
                 blockCount = 0,
-                cellCount = 0,
                 breadcrumbs = crumbs.map { "${it.first}: ${it.second}" },
             )
         }
@@ -189,7 +187,7 @@ object VehicleDetector {
         return n
     }
 
-    /** §3.2 post-processing: bad-adapter fallback, fifteen-block variant, cell count. */
+    /** §3.2 post-processing: bad-adapter fallback, fifteen-block variant, split-pack flag. */
     private suspend fun finalize(
         model: VehicleModel,
         n: Int,
@@ -203,7 +201,6 @@ object VehicleDetector {
             blockCount = 10 // §3.2: assume the adapter is dropping bytes
         }
         val fifteen = blockCount == 15
-        val cellCount = if (fifteen) blockCount * 2 else blockCount * 2 // §3.2 C = N × 2
         val splitPack =
             if (fifteen) {
                 detectSplitPack(session, model, blockCount, crumbs)
@@ -212,13 +209,12 @@ object VehicleDetector {
             }
         CaptureLog.log(
             "DETECT",
-            "resolved ${model.label} n=$blockCount cells=$cellCount fifteen=$fifteen splitPack=$splitPack badAdapter=$badAdapter",
+            "resolved ${model.label} n=$blockCount fifteen=$fifteen splitPack=$splitPack badAdapter=$badAdapter",
         )
         return VehicleInfo(
             model = model,
             supported = true,
             blockCount = blockCount,
-            cellCount = cellCount,
             fifteenBlockVariant = fifteen,
             splitPack = splitPack,
             badAdapter = badAdapter,
@@ -272,7 +268,6 @@ object VehicleDetector {
             model = model,
             supported = false,
             blockCount = 0,
-            cellCount = 0,
             breadcrumbs = crumbs.map { "${it.first}: ${it.second}" },
         )
 }

@@ -23,7 +23,7 @@ import org.junit.Test
  * rules that cannot be produced by the single-fault fixture.
  */
 class SimulatedCarTest {
-    private val gen2 = VehicleInfo(VehicleModel.GEN2, supported = true, blockCount = 14, cellCount = 28)
+    private val gen2 = VehicleInfo(VehicleModel.GEN2, supported = true, blockCount = 14)
 
     private fun read(script: Map<String, String>): Pair<ReplayTransport, org.betsy.dtc.DtcReadResult> {
         val t = ReplayTransport(script)
@@ -219,7 +219,6 @@ class SimulatedCarTest {
                 supported = false,
                 captureOnly = true,
                 blockCount = 0,
-                cellCount = 0,
             )
         assertFalse(info.supported)
         assertTrue(info.captureOnly)

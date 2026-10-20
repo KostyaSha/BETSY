@@ -27,7 +27,7 @@ import org.betsy.ui.theme.applyBetsyTheme
  * background thread, renders into programmatically-built TextViews + [BlockBarView].
  */
 class BatteryActivity : Activity() {
-    /** "Gen 2 · 14 blocks · 28 cells", filled in once detection is known. */
+    /** "Gen2 · 14 blocks", filled in once detection is known. */
     private val vehicleText: TextView by lazy {
         TextStyles.body(this, "", DesignTokens.TEXT_2, DesignTokens.GRAY_11)
     }
@@ -55,7 +55,7 @@ class BatteryActivity : Activity() {
         CaptureLog.log("UI", "BatteryActivity created")
         val info = SessionHolder.info()
         // The mockup puts the vehicle summary in the header, dot-separated, not in the body.
-        vehicleText.text = "${info.model.label} \u00b7 ${info.blockCount} blocks \u00b7 ${info.cellCount} cells"
+        vehicleText.text = "${info.model.label} \u00b7 ${info.blockCount} blocks"
 
         val poller = Poller(SessionHolder.session(), info)
         Thread {
