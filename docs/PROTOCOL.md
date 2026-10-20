@@ -334,7 +334,11 @@ After KWP2000 group reads and before INF freeze pages, Gen2 sweeps also:
 3. `ATH0` in a `finally` block  
 
 The raw line containing `7EA` is stripped of CAN ID + ISO-TP PCI before count-byte decode
-(tags `43` / `47`). Mode `$07` is **supplemental**: Toyota enhanced / non-emissions faults may
+(tags `43` / `47`). The responder must be the CAN ID at the start of the line, not a
+matching sequence inside another ECU's data. Only classical-CAN single-frame PCI lengths
+1–7 are accepted; every declared byte must be present, and padding beyond that length is
+excluded from decoding. Invalid PCI and truncated frames are retained in raw responses with
+an error note. Multi-frame replies remain explicitly unparsed. Mode `$07` is **supplemental**: Toyota enhanced / non-emissions faults may
 not appear there. A clean `$03`/`$07` result must **not** be interpreted as "HV ECU has no
 Toyota DTCs." KWP2000 groups, generic OBD, and INF remain three separate observations.
 

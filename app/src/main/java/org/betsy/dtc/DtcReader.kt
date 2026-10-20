@@ -423,13 +423,13 @@ class DtcReader(
                 try {
                     val raw = session.rawCommand(cmd)
                     raws[rawKey(header, cmd)] = raw
-                    val line = rawLineContaining(raw, "7EA")
+                    val line = rawLineFromCanId(raw, "7EA")
                     if (line == null) {
                         notes += "Generic DTCs ($cmd): no 7EA response line found"
                         return@withEcu emptyList()
                     }
-                    // Strip CAN ID (3 hex) + ISO-TP PCI (2 hex) from the 7EA line.
-                    var norm = Normalize.normalize(line)
+                    // The 11-bit CAN ID is followed by the single-frame PCI length byte.
+                    val norm = Normalize.normalize(line)
                     if (norm.length < 5) {
                         notes += "Generic DTCs ($cmd): 7EA line too short"
                         return@withEcu emptyList()
@@ -442,19 +442,29 @@ class DtcReader(
                             "(raw kept; more DTCs than one frame holds)"
                         return@withEcu emptyList()
                     }
-                    norm = norm.drop(5)
-                    if (norm.startsWith("7F")) {
-                        val nr = NegativeResponse.parse(norm)
+                    val pci = Normalize.u8(norm, 3)
+                    if (pci !in 1..7) {
+                        notes += "Generic DTCs ($cmd): invalid single-frame PCI 0x${"%02X".format(pci)}"
+                        return@withEcu emptyList()
+                    }
+                    val end = 5 + pci * 2
+                    if (norm.length < end) {
+                        notes += "Generic DTCs ($cmd): truncated single-frame response"
+                        return@withEcu emptyList()
+                    }
+                    val payload = norm.substring(5, end)
+                    if (payload.startsWith("7F")) {
+                        val nr = NegativeResponse.parse(payload)
                         notes +=
                             if (nr != null) {
                                 "Generic DTCs ($cmd): 7F ${nr.service} ${"%02X".format(nr.nrc)} (${nr.meaning})"
                             } else {
-                                "Generic DTCs ($cmd): $norm"
+                                "Generic DTCs ($cmd): $payload"
                             }
                         return@withEcu emptyList()
                     }
                     try {
-                        decoder(norm)
+                        decoder(payload)
                     } catch (e: Exception) {
                         notes += "Generic DTCs ($cmd): ${e.message ?: e.toString()}"
                         emptyList()
@@ -535,15 +545,15 @@ class DtcReader(
         }
     }
 
-    /** First non-empty line containing [token] (case-insensitive), for ATH1 multi-line replies. */
-    private fun rawLineContaining(
+    /** Match the responder at the start of an ATH1 line, never inside another ECU's payload. */
+    private fun rawLineFromCanId(
         raw: String,
-        token: String,
+        canId: String,
     ): String? =
         raw
             .split('\r', '\n')
             .map { it.trim() }
-            .firstOrNull { it.contains(token, ignoreCase = true) }
+            .firstOrNull { Normalize.normalize(it).startsWith(canId) }
 
     /**
      * §7.1 engine path. Physical ECM `7E0` (never functional `7DF`, §1.2).

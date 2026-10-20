@@ -273,6 +273,53 @@ class DtcReaderTest {
         assertFalse(result.hasStoredDtcs)
     }
 
+    @Test
+    fun generic03CannotReadACodeFromCanPadding() {
+        val raw = "7EA 02 43 01 0A A6 00 00 00"
+        val result = awaitBlocking { reader(FakeTransport(gen2Base(mapOf("03" to raw))), VehicleModel.GEN2).read() }
+        assertTrue(result.storedGenericDtcs.isEmpty())
+        assertTrue(result.notes.any { it.contains("Generic DTCs (03)") && it.contains("truncated") })
+        assertEquals(raw, result.rawResponses.getValue("7E2/03"))
+    }
+
+    @Test
+    fun generic03RejectsInvalidPciAndTruncatedFrame() {
+        for (raw in listOf("7EA 00 43 00", "7EA 08 43 00", "7EA 21 43 00", "7EA 30 43 00", "7EA 04 43 00")) {
+            val t = FakeTransport(gen2Base(mapOf("03" to raw)))
+            val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+            assertTrue(result.storedGenericDtcs.isEmpty())
+            assertTrue(result.notes.any { it.contains("Generic DTCs (03)") })
+            assertEquals(raw, result.rawResponses.getValue("7E2/03"))
+            assertTrue(t.commands.contains("21CA"))
+            assertTrue(t.commands.count { it == "ATH0" } >= 2)
+        }
+    }
+
+    @Test
+    fun generic03DoesNotMistakeAnotherEcusPayloadForTheResponder() {
+        val other = "7E80443017EA0"
+        val result = awaitBlocking { reader(FakeTransport(gen2Base(mapOf("03" to other))), VehicleModel.GEN2).read() }
+        assertTrue(result.storedGenericDtcs.isEmpty())
+        assertTrue(result.notes.any { it.contains("no 7EA response line") })
+    }
+
+    @Test
+    fun generic03SelectsTheActual7eaLineAndIgnoresItsPadding() {
+        val raw = "7E80443017EA0\r7EA0443010AA6000000"
+        val result = awaitBlocking { reader(FakeTransport(gen2Base(mapOf("03" to raw))), VehicleModel.GEN2).read() }
+        assertEquals(listOf("P0AA6"), result.storedGenericDtcs.map { it.code })
+        assertFalse(result.notes.any { it.contains("Generic DTCs (03)") })
+    }
+
+    @Test
+    fun generic07UsesTheSameSingleFrameBounds() {
+        val raw = "7EA 02 47 01 0A A6 00 00 00"
+        val result = awaitBlocking { reader(FakeTransport(gen2Base(mapOf("07" to raw))), VehicleModel.GEN2).read() }
+        assertTrue(result.pendingGenericDtcs.isEmpty())
+        assertTrue(result.notes.any { it.contains("Generic DTCs (07)") && it.contains("truncated") })
+        assertEquals(raw, result.rawResponses.getValue("7E2/07"))
+    }
+
     /**
      * A multi-frame `$03` reply carries a 4-nibble first-frame PCI and continues on lines this
      * reader never reads. Decoding the first frame alone would report 2 of 6 stored DTCs as if
