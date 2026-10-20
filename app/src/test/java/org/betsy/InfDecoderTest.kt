@@ -48,10 +48,47 @@ class InfDecoderTest {
         assertEquals("a page carries one sub-code, not one per non-zero byte", 1, out.size)
     }
 
-    /** Short payloads cannot reach the field. Absent, not an error, and not a guess. */
+    /** Even a readable INF field does not establish that the complete page arrived. */
     @Test
-    fun aPayloadTooShortToReachTheFieldYieldsNothing() {
-        assertEquals(emptyList<Any>(), InfDecoder.decodeActive("03261C7" + "AA".repeat(20), c7))
+    fun rejectsEveryTruncatedPageWithOrWithoutAnElmLength() {
+        val body = realP0571Page.removePrefix("03261C7")
+        for (bytes in 0 until 48) {
+            for (prefix in listOf("61C7", "03261C7")) {
+                for (data in listOf(body.take(bytes * 2), "00".repeat(bytes))) {
+                    assertThrows(NoDataException::class.java) {
+                        InfDecoder.decodeActive(prefix + data, c7)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun declaredLengthCannotBeSatisfiedByAnOtherwiseReadableInfField() {
+        assertThrows(NoDataException::class.java) {
+            InfDecoder.decodeActive("033" + realP0571Page.removePrefix("032"), c7)
+        }
+    }
+
+    @Test
+    fun shortDeclaredPageCannotBorrowTrailingPadding() {
+        assertThrows(NoDataException::class.java) {
+            InfDecoder.decodeActive("021" + realP0571Page.removePrefix("032"), c7)
+        }
+    }
+
+    @Test
+    fun invalidLengthPrefixesAreRejected() {
+        for (prefix in listOf("001", "000", "32")) {
+            assertThrows(NoDataException::class.java) {
+                InfDecoder.decodeActive(prefix + realP0571Page.removePrefix("032"), c7)
+            }
+        }
+    }
+
+    @Test
+    fun completeUnprefixedPageStillDecodes() {
+        assertEquals(115, InfDecoder.decodeActive(realP0571Page.removePrefix("032"), c7).single().code)
     }
 
     /** The wire field is unsigned 16-bit; decimal digit count does not establish validity. */

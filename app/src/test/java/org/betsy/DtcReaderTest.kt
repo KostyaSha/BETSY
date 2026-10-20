@@ -84,6 +84,20 @@ class DtcReaderTest {
         )
 
     @Test
+    fun gen2TruncatedInfPageRetainsRawReportsFailureAndContinues() {
+        val body = payload(29 to 0x00, 30 to 0x73)
+        for (raw in listOf("61C7" + body.take(40), "03261C7" + body.take(62), "61C7" + body.take(94))) {
+            val t = FakeTransport(gen2Base(mapOf("21C7" to raw, "21CA" to "61CA" + body)))
+            val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+            assertEquals(raw, result.rawResponses.getValue("7E2/21C7").trim())
+            assertEquals(4, result.infTablesResponded)
+            assertTrue(result.notes.any { it.contains("21C7") && it.contains("truncated", ignoreCase = true) })
+            assertEquals(listOf(0xCA), result.infCodes.map { it.table })
+            assertEquals(115, result.infCodes.single().code)
+        }
+    }
+
+    @Test
     fun gen2UnknownInfValueIsRetainedWithoutAnInventedMeaning() {
         val raw = "61C7" + payload(29 to 0xFF, 30 to 0xFF)
         val t = FakeTransport(gen2Base(mapOf("21C7" to raw)))

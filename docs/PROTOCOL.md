@@ -391,6 +391,16 @@ These are five per-DTC freeze pages, not bitmap tables partitioned by the hundre
 page is all zero. When a DTC writes a page, its INF value and analog snapshot occupy the 48-byte
 payload.
 
+BETSY currently decodes the captured Gen2 compact layout with a 48-byte payload. A shorter
+page is a failed read, even if bytes 29–30 are already present or every received byte is zero.
+This is a completeness guard for the supported layout, not a universal expanded-data length:
+other compact layouts require their own support-map handling before fixed offsets are safe.
+When ELM prefixes a response with an application length (for example `032` = 50 bytes,
+including `61 C7`), all declared bytes must arrive. Only then may trailing padding be ignored.
+A declared shorter page cannot borrow padding to pass the completeness guard. Failed pages
+retain their raw responses and an error note, do not increment the completed-page count, and
+do not prevent the remaining pages from being read.
+
 Four consequences for any implementation, all *measured*:
 
 1. **Mode 22 does not exist here.** `2205CA` answers `7F2211`, and so does `22F186`, the refusal
