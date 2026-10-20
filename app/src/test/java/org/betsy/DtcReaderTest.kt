@@ -456,6 +456,37 @@ class DtcReaderTest {
     }
 
     @Test
+    fun partialRepliesAreRetainedButNeverDecodedAsSuccessfulDiagnostics() {
+        val failures =
+            mapOf(
+                "0100" to "4100981A8013",
+                "1380" to "53010A80",
+                "03" to "7EA0443010AA6",
+                "020500" to "42050079",
+                "21C7" to "61C7" + payload(29 to 0, 30 to 115),
+            )
+        val t =
+            FakeTransport(
+                gen2Base(),
+                throwOn = failures.mapValues { TransportException("timeout before prompt", it.value) },
+            )
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        for ((cmd, raw) in failures) {
+            val header = if (cmd == "1380") "7E3" else "7E2"
+            assertEquals(raw, result.rawResponses.getValue("$header/$cmd"))
+        }
+        assertFalse(result.liveness!!.responding)
+        assertTrue(result.groups.isEmpty())
+        assertTrue(result.storedGenericDtcs.isEmpty())
+        assertTrue(result.infCodes.isEmpty())
+        assertEquals(4, result.infTablesResponded)
+        for (cmd in listOf("1380", "03", "020500", "21C7")) {
+            assertTrue(result.notes.any { it.contains(cmd) && it.contains("timeout before prompt") })
+        }
+        assertTrue(t.commands.contains("21CA"))
+    }
+
+    @Test
     fun infTimeoutsDoNotCopyHeaderOrPreviousPageReplies() {
         val valid = "61C7" + payload(29 to 0, 30 to 115)
         val t =

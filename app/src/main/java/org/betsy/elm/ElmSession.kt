@@ -2,6 +2,7 @@ package org.betsy.elm
 
 import org.betsy.debug.CaptureLog
 import org.betsy.transport.ElmTransport
+import org.betsy.transport.TransportException
 import java.util.concurrent.locks.ReentrantLock
 
 /** Session-level failure: an AT command did not get its expected answer (PROTOCOL.md §1.1). */
@@ -29,7 +30,7 @@ class ElmSession(
     /** Inter-command timeout, §6: 2500 ms for Gen2–Gen4.5, 8000 ms for Gen1 and Tahoe. */
     var commandTimeoutMs: Int = 2500
 
-    /** Raw reply to the latest exchange attempt, or empty if that attempt returned no reply. */
+    /** Latest exchange's raw evidence, possibly incomplete after failure; empty if no bytes arrived. */
     var lastRawResponse: String = ""
         private set
 
@@ -132,6 +133,10 @@ class ElmSession(
             CaptureLog.log("ELM", "<< ${raw.trim()}")
             return raw
         } catch (e: Exception) {
+            if (e is TransportException) {
+                lastRawResponse = e.partialResponse
+                if (e.partialResponse.isNotEmpty()) CaptureLog.log("ELM", "<< incomplete ${e.partialResponse}")
+            }
             CaptureLog.logThrowable("ELM", e)
             throw e
         } finally {

@@ -1,5 +1,6 @@
 package org.betsy.transport
 
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.SocketTimeoutException
@@ -24,7 +25,10 @@ interface ElmTransport {
 
 class TransportException(
     message: String,
-) : Exception(message)
+    /** Bytes received for this failed exchange, without a complete terminating prompt. */
+    val partialResponse: String = "",
+    cause: Throwable? = null,
+) : Exception(message, cause)
 
 /** Shared prompt-delimited command exchange for stream-based transports (§1). */
 abstract class StreamTransport : ElmTransport {
@@ -49,9 +53,11 @@ abstract class StreamTransport : ElmTransport {
                 try {
                     input.read()
                 } catch (e: SocketTimeoutException) {
-                    throw TransportException("timeout after $readTimeoutMs ms waiting for '>' (cmd=$cmd)")
+                    throw TransportException("timeout after $readTimeoutMs ms waiting for '>' (cmd=$cmd)", sb.toString(), e)
+                } catch (e: IOException) {
+                    throw TransportException("read failed (cmd=$cmd): ${e.message}", sb.toString(), e)
                 }
-            if (b < 0) throw TransportException("adapter closed the connection (cmd=$cmd)")
+            if (b < 0) throw TransportException("adapter closed the connection (cmd=$cmd)", sb.toString())
             if (b == '>'.code) break // §1: '>' is the response delimiter
             sb.append(b.toChar())
         }

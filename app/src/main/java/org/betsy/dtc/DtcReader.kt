@@ -13,6 +13,7 @@ import org.betsy.elm.NegativeResponseException
 import org.betsy.elm.Normalize
 import org.betsy.model.Dtc
 import org.betsy.model.InfDetail
+import org.betsy.transport.TransportException
 
 /** Logical source of an enhanced DTC observation. Never infer this from display text. */
 enum class DtcSource(
@@ -339,9 +340,8 @@ class DtcReader(
         try {
             val raw =
                 session.withEcu(header) {
-                    session.rawCommand(cmd)
+                    rawDiagnosticCommand(header, cmd, raws)
                 }
-            raws[rawKey(header, cmd)] = raw
             classifyLiveness(header, raw, positive)
         } catch (e: Exception) {
             val msg = e.message ?: e.toString()
@@ -421,8 +421,7 @@ class DtcReader(
                 stage(SweepPhase.GENERIC_OBD, "Generic DTCs (\$$cmd)")
                 session.rawCommand("ATH1")
                 try {
-                    val raw = session.rawCommand(cmd)
-                    raws[rawKey(header, cmd)] = raw
+                    val raw = rawDiagnosticCommand(header, cmd, raws)
                     val line = rawLineFromCanId(raw, "7EA")
                     if (line == null) {
                         notes += "Generic DTCs ($cmd): no 7EA response line found"
@@ -531,7 +530,7 @@ class DtcReader(
         }
     }
 
-    /** Keep every received reply before classification; a transport failure has no reply to copy. */
+    /** Keep raw evidence before classification; incomplete exchanges never reach value decoding. */
     private suspend fun readFreezeResponse(
         header: String,
         cmd: String,
@@ -541,7 +540,7 @@ class DtcReader(
         val label = "Freeze frame ${cmd.takeLast(2)} $cmd on $header"
         val raw =
             try {
-                session.rawCommand(cmd)
+                rawDiagnosticCommand(header, cmd, raws)
             } catch (e: Exception) {
                 notes += "$label: ${e.message ?: e.toString()}"
                 return null
@@ -565,6 +564,30 @@ class DtcReader(
             return null
         }
         return response
+    }
+
+    /** Preserve a failed exchange's bytes without ever returning them to a decoder. */
+    private suspend fun rawDiagnosticCommand(
+        header: String,
+        cmd: String,
+        raws: MutableMap<String, String>,
+    ): String =
+        try {
+            session.rawCommand(cmd).also { raws[rawKey(header, cmd)] = it }
+        } catch (e: Exception) {
+            retainPartialReply(e, header, cmd, raws)
+            throw e
+        }
+
+    private fun retainPartialReply(
+        error: Exception,
+        header: String,
+        cmd: String,
+        raws: MutableMap<String, String>,
+    ) {
+        if (error is TransportException && error.partialResponse.isNotEmpty()) {
+            raws[rawKey(header, cmd)] = error.partialResponse
+        }
     }
 
     /** Match the responder at the start of an ATH1 line, never inside another ECU's payload. */
@@ -633,6 +656,7 @@ class DtcReader(
                                 raws[rawKey(header, cmd)] = raw
                                 parse(raw)
                             } catch (e: Exception) {
+                                retainPartialReply(e, header, cmd, raws)
                                 notes += "${read.label} $cmd: ${e.message ?: e.toString()}"
                                 emptyList()
                             }

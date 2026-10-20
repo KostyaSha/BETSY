@@ -471,8 +471,10 @@ documented `(DTC, INF)` pairs for the DTCs reported by hybrid control:
 2. Several matching parents produce one shared explanation only when their full detail is equal.
 3. No match, or conflicting matches, remains unresolved.
 
-Raw pages stay beside every interpretation. A transport failure without a returned reply
-records an error note and no raw-response entry for that request. Session-level raw evidence
+Raw pages stay beside every interpretation. A transport failure without any received bytes
+records an error note and no raw-response entry for that request. Bytes received before a
+missing prompt, read failure, or disconnect are retained under the failed request as partial
+raw evidence alongside the failure; they are never decoded as a successful result. Session-level raw evidence
 is cleared before each exchange, so a timeout cannot copy the preceding page or header reply.
 Actual ECU refusals and adapter error text remain available as the current request's raw reply. Page order never selects a parent, and DTCs reported
 only by the engine or battery-control observation cannot acquire a hybrid-control INF explanation.
@@ -524,7 +526,8 @@ uses the hybrid-control freeze pages described in §7.4.1 and §7.4.2.
 Every mode-02 reply, including negative responses and adapter errors, is retained under its
 ECU/request raw key before classification. Refusals and transport errors produce a note naming
 the ECU, request, and frame index; a failed PID does not stop the remaining PID reads. A
-transport exception has no received reply and must not copy the preceding command's response.
+transport exception may retain partial bytes from its own exchange, but must not copy the
+preceding command's response or decode incomplete evidence as a successful PID value.
 The positive header must echo service, PID, and frame index; the mask requires all four mask
 bytes. Individual PID replies require their complete value: two bytes for `02`, `0C`, `1F`,
 `31`, `42`, and `4E`; one byte for `04`, `05`, `0D`, `0F`, `11`, and `46`. This guards the
