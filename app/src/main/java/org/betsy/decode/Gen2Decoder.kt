@@ -15,6 +15,19 @@ import org.betsy.model.BatteryModel
  * °C; unit conversion is a display-layer concern.
  */
 object Gen2Decoder {
+    /** The implemented P4 layout has 17 CE voltage words and at most 3 CF spillover words. */
+    private const val MAX_BLOCK_COUNT = 20
+
+    /** Read D0 byte 0 and require the full preamble and all reported resistance bytes (§5.2). */
+    fun readBlockCount(r: String): Int {
+        val i = Normalize.requireTag(r, "61D0")
+        Normalize.requireLength(r, i + 34, "21D0")
+        val count = Normalize.u8(r, i + 4)
+        if (count !in 1..MAX_BLOCK_COUNT) throw NoDataException("21D0: unsupported block count $count")
+        Normalize.requireLength(r, i + 34 + count * 2, "21D0")
+        return count
+    }
+
     /** 21CE, SOC, current, block voltages 0..min(N,17)−1 (§5.2). */
     fun decodeCe(
         r: String,
@@ -74,9 +87,10 @@ object Gen2Decoder {
         m: BatteryModel,
     ) {
         val n = m.blockCount
+        val reported = readBlockCount(r)
+        if (reported != n) throw NoDataException("21D0: block count $reported does not match monitor count $n")
         val i = Normalize.requireTag(r, "61D0")
         val k = i + 34 // skips the 4-char tag + 15 bytes of mapped preamble (§5.2)
-        Normalize.requireLength(r, k + n * 2, "21D0")
         val ir = MutableList(n) { 0 }
         for (idx in 0 until n) {
             ir[idx] = Normalize.u8(r, k + idx * 2)
@@ -98,6 +112,8 @@ object Gen2Decoder {
         Normalize.requireLength(r, c + 34 + spilloverChars, "21CED0CF")
         if (!r.startsWith("D0", d)) throw NoDataException("21CED0CF: expected D0 after CE payload")
         if (!r.startsWith("CF", c)) throw NoDataException("21CED0CF: expected CF after D0 payload")
+        val reported = Normalize.u8(r, d + 2)
+        if (reported != n) throw NoDataException("21CED0CF: block count $reported does not match monitor count $n")
 
         m.soc = Normalize.u8(r, i + 4) / 2f
         m.currentAmps = Normalize.u16(r, i + 6) / 100f - 327.68f

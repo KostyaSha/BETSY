@@ -146,6 +146,13 @@ discovery there is *inferred*, unverified, and deliberately not relied on.
 
 ### 3.3 Block count and split packs
 
+For Gen2, block count `N` is read directly from D0 payload byte 0. The complete 15-byte
+preamble and all `N` resistance bytes must be present. The implemented P4 voltage layout
+supports 1–20 blocks; counts outside that range are rejected. This is a decoder limit,
+not a claim about every Toyota battery. An invalid Gen2 count is never inferred from resistance
+values or replaced with 10. Both standalone D0 and combined reads reject a count that differs
+from the monitor configuration before updating values.
+
 Block count `N` comes from the ECU rather than being assumed. The `N == 15` variant additionally
 tests for a split pack by comparing the first blocks against the last: a set reading above 18 V
 where the tail reads below indicates two differently-scaled halves. *Inferred*, and only

@@ -1,6 +1,7 @@
 package org.betsy.detect
 
 import org.betsy.debug.CaptureLog
+import org.betsy.decode.Gen2Decoder
 import org.betsy.elm.ElmException
 import org.betsy.elm.ElmSession
 import org.betsy.elm.NoDataException
@@ -75,7 +76,7 @@ object VehicleDetector {
         }
         // 2. Gen2, ATSH7E3, probe 21CE, expect 61CE
         if (probe(session, "7E3", "21CE", "61CE", crumbs)) {
-            val n = discoverGen2BlockCount(session, crumbs)
+            val n = Gen2Decoder.readBlockCount(session.command("21D0"))
             return finalize(VehicleModel.GEN2, n, session, crumbs)
         }
         // 3. The same request answered by 7E2 instead. Never observed on a real car, so it is
@@ -157,19 +158,6 @@ object VehicleDetector {
         }
     }
 
-    /** Gen2-layout block count: 21D0 byte 0 is the ECU-reported count (§5.2, §3.2 correction). */
-    private suspend fun discoverGen2BlockCount(
-        session: ElmSession,
-        crumbs: MutableList<Pair<String, String>>,
-    ): Int {
-        val r = session.command("21D0")
-        val i = Normalize.requireTag(r, "61D0")
-        val fromByte = Normalize.u8(r, i + 4)
-        if (fromByte in 1..100) return fromByte
-        crumbs += "21D0" to "byte-0 count implausible ($fromByte); scanning IR"
-        return scanIr(r, i + 34, "21D0")
-    }
-
     /** Gen3 block count: scan 2195 IR bytes; bound 255 not 60 (§3.2 correction). */
     private suspend fun discoverGen3BlockCount(
         session: ElmSession,
@@ -210,7 +198,7 @@ object VehicleDetector {
     ): VehicleInfo {
         var blockCount = n
         var badAdapter = false
-        if (n < 7) {
+        if (model != VehicleModel.GEN2 && n < 7) {
             badAdapter = true
             blockCount = 10 // §3.2: assume the adapter is dropping bytes
         }
