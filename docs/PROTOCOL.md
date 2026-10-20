@@ -255,6 +255,13 @@ decodes to SOC 54.5 %, current +2.67 A, 14 blocks 15.03–15.26 V, pack 212.15 V
 aux 13.8 V, temps 31.45 / 30.99 / 31.56 °C. These constants are self-validating, a Gen2 block is
 two 7.2 V modules, so a wrong offset yields 340 V or 0.15 V, not a subtly wrong answer.
 
+The Gen2 CE/D0/CF and combined decoders require the expected service/PID at the application
+start, optionally after a three-digit ELM application length. Declared bytes must all arrive;
+only the declared message is decoded, so trailing padding cannot supply missing fields.
+For the supported 14-block compact layout, standalone CF needs the 16 payload bytes actually
+used by its scalar and three-temperature fields, not an extra two bytes. This does not establish
+a universal CF size for every ECU support map. Numeric formulas are unchanged by these guards.
+
 ### 5.6 Speed and RPM
 
 `010C0D` returns both in one reply: `41 0C <rpm u16> 0D <speed u8>`.
