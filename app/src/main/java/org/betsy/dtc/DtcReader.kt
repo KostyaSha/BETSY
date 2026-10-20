@@ -557,7 +557,9 @@ class DtcReader(
             notes += "$label: unexpected response (expected $expected): ${raw.trim()}"
             return null
         }
-        val needed = if (cmd.substring(2, 4) == "00") expected.length + 8 else expected.length + 2
+        val pid = cmd.substring(2, 4)
+        val dataBytes = if (pid == "00") 4 else FREEZE_FRAME_DATA_BYTES.getValue(pid)
+        val needed = expected.length + dataBytes * 2
         if (response.length < needed) {
             notes += "$label: truncated response"
             return null
@@ -736,21 +738,23 @@ class DtcReader(
          * which names the causing DTC. Kept explicit rather than derived from the `0200` mask:
          * the mask advertised PIDs the car then refused, so the measured list is the honest one.
          */
-        val FREEZE_FRAME_PIDS =
-            listOf(
-                "02", // the DTC that caused this frame
-                "04", // calculated engine load
-                "05", // engine coolant temperature
-                "0C", // engine rpm
-                "0D", // vehicle speed
-                "0F", // intake air temperature
-                "11", // throttle position
-                "1F", // run time since engine start
-                "31", // distance since codes cleared
-                "42", // control module voltage
-                "46", // ambient air temperature
-                "4E", // time since DTCs cleared
+        private val FREEZE_FRAME_DATA_BYTES =
+            mapOf(
+                "02" to 2, // causing DTC
+                "04" to 1, // calculated load
+                "05" to 1, // coolant temperature
+                "0C" to 2, // engine rpm
+                "0D" to 1, // vehicle speed
+                "0F" to 1, // intake temperature
+                "11" to 1, // throttle position
+                "1F" to 2, // engine run time
+                "31" to 2, // distance since codes cleared
+                "42" to 2, // control module voltage
+                "46" to 1, // ambient temperature
+                "4E" to 2, // time since codes cleared
             )
+
+        val FREEZE_FRAME_PIDS = FREEZE_FRAME_DATA_BYTES.keys.toList()
 
         /** Capture/raw map key that keeps hybrid and engine `13B0` distinct. */
         fun rawKey(

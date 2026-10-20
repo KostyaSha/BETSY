@@ -256,6 +256,40 @@ class DtcReaderTest {
     }
 
     @Test
+    fun freezePidsRequireTheirCompleteValueAndRetainTruncatedRaw() {
+        val widths =
+            mapOf(
+                "02" to 2,
+                "04" to 1,
+                "05" to 1,
+                "0C" to 2,
+                "0D" to 1,
+                "0F" to 1,
+                "11" to 1,
+                "1F" to 2,
+                "31" to 2,
+                "42" to 2,
+                "46" to 1,
+                "4E" to 2,
+            )
+        for ((pid, width) in widths) {
+            val cmd = "02${pid}00"
+            for (bytes in 0 until width) {
+                val raw = "42${pid}00" + "80".repeat(bytes)
+                val t = FakeTransport(gen2Base(mapOf(cmd to raw)))
+                val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+                assertEquals(raw, result.rawResponses.getValue("7E2/$cmd"))
+                assertTrue(result.notes.any { it.contains("$cmd on 7E2") && it.contains("truncated") })
+                assertTrue(t.commands.contains("21CA"))
+            }
+            val raw = "42${pid}00" + "80".repeat(width)
+            val result = awaitBlocking { reader(FakeTransport(gen2Base(mapOf(cmd to raw))), VehicleModel.GEN2).read() }
+            assertEquals(raw, result.rawResponses.getValue("7E2/$cmd"))
+            assertFalse(result.notes.any { it.contains("$cmd on 7E2") })
+        }
+    }
+
+    @Test
     fun freezePidRefusalsAndAdapterErrorsKeepRawAndDoNotStopOtherPids() {
         for (failed in listOf("7F0212", "NO DATA", "CAN ERROR", "?", "4205017F", "420500")) {
             val t = FakeTransport(gen2Base(mapOf("020500" to failed, "020C00" to "420C000000")))

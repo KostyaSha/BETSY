@@ -523,8 +523,9 @@ ECU/request raw key before classification. Refusals and transport errors produce
 the ECU, request, and frame index; a failed PID does not stop the remaining PID reads. A
 transport exception has no received reply and must not copy the preceding command's response.
 The positive header must echo service, PID, and frame index; the mask requires all four mask
-bytes. Individual PID replies require at least one data byte. This is a minimum guard, not a
-full length or value decoder for every PID. A failed mask stops further frame discovery while
+bytes. Individual PID replies require their complete value: two bytes for `02`, `0C`, `1F`,
+`31`, `42`, and `4E`; one byte for `04`, `05`, `0D`, `0F`, `11`, and `46`. This guards the
+current PID list; it does not decode values or establish a universal transport-message length. A failed mask stops further frame discovery while
 subsequent INF reads continue. A refusal is evidence that the request was declined, not proof
 that the ECU contains no recorded faults.
 
