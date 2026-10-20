@@ -45,10 +45,13 @@ object DtcDecoder {
         Normalize.requireLength(response, 4, tag)
         val count = Normalize.u8(response, 2)
         Normalize.requireLength(response, 4 + count * 4, tag)
-        return (0 until count).map {
-            val raw = Normalize.u16(response, 4 + it * 4)
-            Dtc(raw = raw, code = format(raw))
+        val codes = mutableListOf<Dtc>()
+        for (index in 0 until count) {
+            val raw = Normalize.u16(response, 4 + index * 4)
+            if (raw == 0) break
+            codes += Dtc(raw = raw, code = format(raw))
         }
+        return codes
     }
 
     /** Only an application response, optionally preceded by an ELM length, can carry the list. */

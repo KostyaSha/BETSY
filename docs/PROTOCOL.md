@@ -359,7 +359,11 @@ beyond the counted list is ignored. The positive service must start the applicat
 a matching byte sequence inside another response is not a DTC list. An optional three-digit
 ELM application-length prefix bounds the message: all declared bytes must arrive, and bytes
 outside that length cannot satisfy the count. This validates a single assembled response;
-it does not add collection of multiple application responses.
+it does not add collection of multiple application responses. After the complete counted
+body has been verified, a zero code word (`0000`) terminates the list without producing
+`P0000`; earlier codes are retained and later words are not interpreted. Individual zero
+bytes inside a nonzero code remain valid. The raw response, including the marker and tail,
+is preserved for review. The zero marker does not waive the completeness checks above.
 
 ### 7.3 Letter mapping and parsing
 

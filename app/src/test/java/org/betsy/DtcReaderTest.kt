@@ -84,6 +84,28 @@ class DtcReaderTest {
         )
 
     @Test
+    fun gen2ZeroDtcWordsDoNotCreateFaultGroupsButRawRepliesRemain() {
+        val t = FakeTransport(gen2Base(mapOf("13B0" to "53010000", "1380" to "53010000")))
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertTrue(result.groups.isEmpty())
+        assertFalse(result.hasStoredDtcs)
+        for (key in listOf("7E2/13B0", "7E3/1380", "7E0/13B0")) {
+            assertEquals("53010000", result.rawResponses.getValue(key))
+        }
+        assertTrue(t.commands.contains("21CA"))
+    }
+
+    @Test
+    fun gen2KeepsCodesBeforeTheZeroMarkerWithoutReadingPastIt() {
+        val raw = "5303000100000571"
+        val t = FakeTransport(gen2Base(), byHeader = mapOf("7E2/13B0" to raw))
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        val group = result.groups.single()
+        assertEquals(listOf("P0001"), group.codes.map { it.code })
+        assertEquals(raw, result.rawResponses.getValue("7E2/13B0"))
+    }
+
+    @Test
     fun gen2WrongOrUnframedDtcResponseIsLoggedAndDoesNotCreateCodes() {
         for (raw in listOf("620053013000", "00253013000", "00653013000")) {
             val t = FakeTransport(gen2Base(), byHeader = mapOf("7E2/13B0" to raw))

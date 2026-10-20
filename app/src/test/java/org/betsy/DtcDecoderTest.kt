@@ -101,6 +101,32 @@ class DtcDecoderTest {
     }
 
     @Test
+    fun zeroWordIsAnEndMarkerRatherThanP0000() {
+        assertEquals(emptyList<Dtc>(), DtcDecoder.decodeMode13("53010000"))
+        assertEquals(listOf("P3000"), DtcDecoder.decodeMode13("530230000000").map { it.code })
+        assertEquals(listOf("P3000"), DtcDecoder.decodeMode13("5303300000000571").map { it.code })
+        assertEquals(emptyList<Dtc>(), DtcDecoder.decodeMode13("530200000571"))
+    }
+
+    @Test
+    fun zeroBytesWithinANonzeroCodeAreNotAnEndMarker() {
+        assertEquals(listOf("P0001", "P0100"), DtcDecoder.decodeMode13("530200010100").map { it.code })
+    }
+
+    @Test
+    fun zeroMarkerDoesNotExcuseAMissingCountedBody() {
+        assertThrows(NoDataException::class.java) { DtcDecoder.decodeMode13("53020000") }
+        assertThrows(NoDataException::class.java) { DtcDecoder.decodeMode13("00253010000") }
+    }
+
+    @Test
+    fun sharedCountedDecodersDoNotReportZeroWordsAsFaults() {
+        assertEquals(emptyList<Dtc>(), DtcDecoder.decodeMode03("43010000"))
+        assertEquals(emptyList<Dtc>(), DtcDecoder.decodeMode07("47010000"))
+        assertEquals(emptyList<Dtc>(), DtcDecoder.decodeMode0A("4A010000"))
+    }
+
+    @Test
     fun mode0aPermanent() {
         val r = "4A01C112" // U0112
         assertEquals(listOf("U0112"), DtcDecoder.decodeMode0A(r).map { it.code })
