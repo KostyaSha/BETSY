@@ -84,6 +84,16 @@ class DtcReaderTest {
         )
 
     @Test
+    fun gen2UnknownInfValueIsRetainedWithoutAnInventedMeaning() {
+        val raw = "61C7" + payload(29 to 0xFF, 30 to 0xFF)
+        val t = FakeTransport(gen2Base(mapOf("21C7" to raw)))
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertEquals(65535, result.infCodes.single().code)
+        assertEquals(raw, result.rawResponses.getValue("7E2/21C7").trim())
+        assertEquals(listOf(InfMeaning.Resolution.Unresolved(65535)), result.infResolutions)
+    }
+
+    @Test
     fun gen2TruncatedDtcListRetainsRawAndReportsFailure() {
         for (raw in listOf("53", "5302", "53033000")) {
             val t = FakeTransport(gen2Base(), byHeader = mapOf("7E2/13B0" to raw))

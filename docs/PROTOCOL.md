@@ -423,7 +423,15 @@ alongside analog snapshot data.
 
 **Reading the sub-code.** One field, `u16` big-endian at bytes **29-30** of a page's payload. It
 is the only 16-bit field in a page; every other field is 8 or 1 bit, and a three-digit code cannot
-fit in 8 bits. A page that is entirely zero holds nothing.
+fit in 8 bits. A page that is entirely zero holds nothing. The detail field itself is
+unsigned 16-bit with identity scaling and no unit. Retain any nonzero value, including values
+outside 100–999, as raw evidence; decimal digit count is not a validity check. Zero yields no
+INF entry even when other snapshot fields are nonzero. Unknown values remain unresolved and
+must not acquire a guessed DTC relationship or description.
+
+The detail-ID list is a separate format: it uses service `12 <snapshot index> 01 C5`,
+response `52`, a high-bit presence flag and a 15-bit identifier. Its presence mask must not be
+applied to the 16-bit Information field inside a `61 C6`–`61 CA` snapshot.
 
 **A page is a stored snapshot, not live data.** The 48 bytes remained identical across an ignition
 cycle. Live values would have drifted. The remaining bytes are analog readings, offset-binary,

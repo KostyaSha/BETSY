@@ -54,14 +54,21 @@ class InfDecoderTest {
         assertEquals(emptyList<Any>(), InfDecoder.decodeActive("03261C7" + "AA".repeat(20), c7))
     }
 
-    /** Non-zero bytes but nothing three-digit in the field: report nothing rather than noise. */
+    /** The wire field is unsigned 16-bit; decimal digit count does not establish validity. */
     @Test
-    fun anImplausibleValueIsNotReported() {
-        val b = MutableList(48) { 0 }
-        b[10] = 0x55
-        b[InfDecoder.CODE_BYTE] = 0xFF
-        b[InfDecoder.CODE_BYTE + 1] = 0xFF
-        val hex = b.joinToString("") { "%02X".format(it) }
+    fun retainsNonzeroValuesAcrossTheUnsignedFieldRange() {
+        for (code in listOf(1, 99, 100, 999, 1000, 32767, 32768, 65535)) {
+            val b = MutableList(48) { 0 }
+            b[InfDecoder.CODE_BYTE] = code ushr 8
+            b[InfDecoder.CODE_BYTE + 1] = code and 0xFF
+            val hex = b.joinToString("") { "%02X".format(it) }
+            assertEquals(code, InfDecoder.decodeActive("03261C7$hex", c7).single().code)
+        }
+    }
+
+    @Test
+    fun aPopulatedPageWithZeroDetailYieldsNothing() {
+        val hex = "55" + "00".repeat(47)
         assertEquals(emptyList<Any>(), InfDecoder.decodeActive("03261C7$hex", c7))
     }
 

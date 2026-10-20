@@ -31,16 +31,13 @@ object InfDecoder {
     /** Byte offset of the sub-code field within a page payload; 16 bits, big-endian. */
     const val CODE_BYTE = 29
 
-    /** Sub-codes are three digits. Anything outside this is not one, and is not reported. */
-    private val PLAUSIBLE = 100..999
-
     /**
      * The sub-code carried by one page, or null when the page carries none.
      *
-     * Null covers three distinct cases, all of them normal: the page is all zero because no DTC
-     * wrote it, the payload is too short to reach the field, or the field holds something outside
-     * the three-digit range. None is an error, so none throws. A missing `61 <lid>` tag does
-     * throw, because that means the read itself failed (§2.2).
+     * An all-zero page or a zero detail field yields no entry. Nonzero unsigned 16-bit
+     * values are retained even when their meaning is unknown; interpretation is separate.
+     * Payloads too short to reach the field currently yield no entry. A missing `61 <lid>`
+     * tag throws because the read itself failed (§2.2).
      */
     fun decodeActive(
         r: String,
@@ -65,7 +62,7 @@ object InfDecoder {
         val code =
             ((payload[CODE_BYTE].toInt() and 0xFF) shl 8) or
                 (payload[CODE_BYTE + 1].toInt() and 0xFF)
-        if (code !in PLAUSIBLE) return emptyList()
+        if (code == 0) return emptyList()
         return listOf(InfDetail(table = table.lid, code = code))
     }
 }
