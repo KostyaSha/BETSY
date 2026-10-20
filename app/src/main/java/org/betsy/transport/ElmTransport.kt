@@ -35,6 +35,8 @@ abstract class StreamTransport : ElmTransport {
     protected abstract val input: InputStream
     protected abstract val output: OutputStream
 
+    private var unusable = false
+
     /** Applies [readTimeoutMs] to the underlying stream, if the transport supports it. */
     protected abstract fun applyTimeout(ms: Int)
 
@@ -45,23 +47,43 @@ abstract class StreamTransport : ElmTransport {
         }
 
     final override suspend fun send(cmd: String): String {
-        output.write((cmd + "\r").toByteArray(Charsets.US_ASCII))
-        output.flush()
+        if (unusable) throw TransportException("stream boundary lost; reconnect before sending $cmd")
+        try {
+            output.write((cmd + "\r").toByteArray(Charsets.US_ASCII))
+            output.flush()
+        } catch (e: IOException) {
+            throw failExchange("write failed (cmd=$cmd): ${e.message}", cause = e)
+        }
         val sb = StringBuilder()
         while (true) {
             val b =
                 try {
                     input.read()
                 } catch (e: SocketTimeoutException) {
-                    throw TransportException("timeout after $readTimeoutMs ms waiting for '>' (cmd=$cmd)", sb.toString(), e)
+                    throw failExchange("timeout after $readTimeoutMs ms waiting for '>' (cmd=$cmd)", sb.toString(), e)
                 } catch (e: IOException) {
-                    throw TransportException("read failed (cmd=$cmd): ${e.message}", sb.toString(), e)
+                    throw failExchange("read failed (cmd=$cmd): ${e.message}", sb.toString(), e)
                 }
-            if (b < 0) throw TransportException("adapter closed the connection (cmd=$cmd)", sb.toString())
+            if (b < 0) throw failExchange("adapter closed the connection (cmd=$cmd)", sb.toString())
             if (b == '>'.code) break // §1: '>' is the response delimiter
             sb.append(b.toChar())
         }
         return sb.toString()
+    }
+
+    /** A lost delimiter or failed write makes subsequent command/reply association unsafe. */
+    private fun failExchange(
+        message: String,
+        partialResponse: String = "",
+        cause: IOException? = null,
+    ): TransportException {
+        unusable = true
+        try {
+            close()
+        } catch (_: Exception) {
+            // Keep the exchange failure and its bytes even if closing the broken link fails.
+        }
+        return TransportException(message, partialResponse, cause)
     }
 }
 

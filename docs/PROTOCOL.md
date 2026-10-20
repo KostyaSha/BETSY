@@ -33,6 +33,12 @@ ATSTFF        maximum timeout
 breaks. `ATSTFF` matters because the first request after protocol detection can exceed a second,
 and a short timeout turns that into a spurious `NO DATA`.
 
+After a missing prompt, EOF, read failure, or failed write, a stream transport closes the
+connection and rejects further commands before writing or reading. Reconnect with a new
+transport instance; retrying ATZ on the failed stream cannot restore a known boundary.
+Partial bytes remain evidence for the failed request. This deliberately does not attempt to
+drain late responses, and does not change how complete ECU refusals or NO DATA are handled.
+
 Transports are interchangeable above the byte link: classic Bluetooth (RFCOMM/SPP, UUID
 `00001101-0000-1000-8000-00805F9B34FB`), BLE (GATT), or Wi-Fi (TCP, commonly
 `192.168.0.10:35000`).
