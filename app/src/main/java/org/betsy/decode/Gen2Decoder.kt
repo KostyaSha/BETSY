@@ -1,5 +1,6 @@
 package org.betsy.decode
 
+import org.betsy.elm.NoDataException
 import org.betsy.elm.Normalize
 import org.betsy.model.BatteryModel
 
@@ -22,7 +23,7 @@ object Gen2Decoder {
         val n = m.blockCount
         val i = Normalize.requireTag(r, "61CE")
         val count = minOf(n, 17)
-        Normalize.requireLength(r, i + 4 + count * 4, "21CE")
+        Normalize.requireLength(r, i + 10 + count * 4, "21CE")
         m.soc = Normalize.u8(r, i + 4) / 2f
         m.currentAmps = Normalize.u16(r, i + 6) / 100f - 327.68f
         val blocks = MutableList(n) { 0f }
@@ -91,12 +92,12 @@ object Gen2Decoder {
     ) {
         val n = m.blockCount
         val i = Normalize.requireTag(r, "61CE")
-        val end = if (n > 17) i + 72 else i + 4 + n * 4
-        val d = Normalize.requireTag(r, "D0", end) // IR section
-        val c = Normalize.requireTag(r, "CF", d + 2 + n * 2) // spillover/limits/temps section
-        // 21CF payload is 16 bytes: aux, three limits, ΔSOC, then TB1–TB3 (u16) ending at byte 15.
-        // The measured acceptance fixture (PROTOCOL.md §5.2) is 34 chars here, tag included.
-        Normalize.requireLength(r, c + 34, "21CED0CF")
+        val d = i + 10 + minOf(n, 17) * 4 // CE tag, SOC, current, block voltages.
+        val c = d + 32 + n * 2 // D0 tag, 15-byte preamble, one IR byte per block.
+        val spilloverChars = maxOf(n - 17, 0) * 4
+        Normalize.requireLength(r, c + 34 + spilloverChars, "21CED0CF")
+        if (!r.startsWith("D0", d)) throw NoDataException("21CED0CF: expected D0 after CE payload")
+        if (!r.startsWith("CF", c)) throw NoDataException("21CED0CF: expected CF after D0 payload")
 
         m.soc = Normalize.u8(r, i + 4) / 2f
         m.currentAmps = Normalize.u16(r, i + 6) / 100f - 327.68f

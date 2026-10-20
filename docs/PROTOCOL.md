@@ -197,6 +197,11 @@ Service `0x21` with a **single-byte** local identifier. Several identifiers may 
 one message on `7E3`, `21CED0CF` returns all three blocks concatenated, each behind its own
 identifier echo, which makes a full refresh one round trip.
 
+Section identifiers are checked at the calculated byte boundaries, never searched inside
+sensor data. For the measured 14-block NHW20 reply, `D0` follows the 31-byte CE payload
+and `CF` follows the 29-byte D0 payload. A voltage or resistance byte equal to `D0` or `CF`
+is a sensor value, not a section marker. Truncated CE data is rejected before updating the model.
+
 **`21CE`**, SOC, current, block voltages:
 
 | Field | Location | Formula |
