@@ -109,6 +109,13 @@ diagnostic the difference between "no fault" and "we failed to ask" is the whole
 
 ## 3. Vehicle detection
 
+For the Gen2 detection path, probe tags must be at the application-message boundary, optionally
+after a complete three-digit ELM length envelope. After `21D0` supplies the block count, the
+already received `21CE` sample must contain the full CE fields for that count before live data
+is enabled. This validation adds no requests. Transport failures and malformed declared probe
+messages abort detection rather than count as evidence for another layout; ordinary unsupported
+PID replies still allow fallback. This is BETSY detection policy, not the original OEM model-selection flow.
+
 A fallback chain. Each probe sets a header, issues one command, and looks for the expected
 positive tag; a miss falls through. Do not ask the user which car they have.
 

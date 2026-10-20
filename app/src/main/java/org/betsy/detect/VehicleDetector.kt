@@ -6,6 +6,8 @@ import org.betsy.elm.ElmException
 import org.betsy.elm.ElmSession
 import org.betsy.elm.NoDataException
 import org.betsy.elm.Normalize
+import org.betsy.model.BatteryModel
+import org.betsy.transport.TransportException
 import kotlin.math.round
 
 /**
@@ -75,7 +77,10 @@ object VehicleDetector {
         }
         // 2. Gen2, ATSH7E3, probe 21CE, expect 61CE
         if (probe(session, "7E3", "21CE", "61CE", crumbs)) {
+            val ce = Normalize.normalize(session.lastRawResponse)
             val n = Gen2Decoder.readBlockCount(session.command("21D0"))
+            // Validate the initial sample using the reported count before enabling live decoding.
+            Gen2Decoder.decodeCe(ce, BatteryModel(blockCount = n))
             return finalize(VehicleModel.GEN2, n, session, crumbs)
         }
         // 3. The same request answered by 7E2 instead. Never observed on a real car, so it is
@@ -112,7 +117,7 @@ object VehicleDetector {
         )
     }
 
-    /** Sets the header, sends [cmd], and returns true when the response contains [tag] (§3). */
+    /** Sets the header and matches [tag] only at the application-message boundary (§3). */
     private suspend fun probe(
         session: ElmSession,
         header: String,
@@ -123,15 +128,29 @@ object VehicleDetector {
         session.setHeader(header)
         return try {
             val r = session.command(cmd)
-            val ok = r.contains(tag)
+            val ok = matchesProbeResponse(r, tag)
             CaptureLog.log("DETECT", "$header $cmd -> ${if (ok) "hit" else "miss (no $tag)"}")
             if (!ok) crumbs += header to "no $tag"
             ok
         } catch (e: Exception) {
             CaptureLog.logThrowable("DETECT", e)
             crumbs += header to (e.message ?: e.toString())
+            if (e is TransportException || e is ElmException) throw e
             false
         }
+    }
+
+    /** The adapter may prefix an assembled reply with a three-digit application length. */
+    private fun matchesProbeResponse(
+        r: String,
+        tag: String,
+    ): Boolean {
+        if (r.startsWith(tag)) return true
+        if (!r.startsWith(tag, 3)) return false
+        val declared = r.take(3).toIntOrNull(16)
+        if (declared == null || declared * 2 < tag.length) throw ElmException("$tag: invalid probe length prefix")
+        if (r.length < 3 + declared * 2) throw ElmException("$tag: truncated declared probe response")
+        return true
     }
 
     /** Same as [probe] but also rejects responses carrying the `2213` negative-response code. */
