@@ -1,5 +1,6 @@
 package org.betsy.decode
 
+import org.betsy.elm.NoDataException
 import org.betsy.elm.Normalize
 import org.betsy.model.Dtc
 
@@ -40,15 +41,28 @@ object DtcDecoder {
         r: String,
         tag: String,
     ): List<Dtc> {
-        val i = Normalize.requireTag(r, tag)
-        Normalize.requireLength(r, i + 4, tag)
-        val count = Normalize.u8(r, i + 2)
-        val k = i + 4
-        Normalize.requireLength(r, k + count * 4, tag)
+        val response = countedMessage(r, tag)
+        Normalize.requireLength(response, 4, tag)
+        val count = Normalize.u8(response, 2)
+        Normalize.requireLength(response, 4 + count * 4, tag)
         return (0 until count).map {
-            val raw = Normalize.u16(r, k + it * 4)
+            val raw = Normalize.u16(response, 4 + it * 4)
             Dtc(raw = raw, code = format(raw))
         }
+    }
+
+    /** Only an application response, optionally preceded by an ELM length, can carry the list. */
+    private fun countedMessage(
+        r: String,
+        tag: String,
+    ): String {
+        if (r.startsWith(tag)) return r
+        if (!r.startsWith(tag, 3)) throw NoDataException("$tag: unexpected response service")
+        val declared = r.take(3).toIntOrNull(16)
+        if (declared == null || declared < 2) throw NoDataException("$tag: invalid response length prefix")
+        val end = 3 + declared * 2
+        Normalize.requireLength(r, end, tag)
+        return r.substring(3, end)
     }
 
     /** §9.1, mode 13 (`13 <mask>`, response tag `53`). */

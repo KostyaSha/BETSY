@@ -4,6 +4,7 @@ import org.betsy.decode.DtcDecoder
 import org.betsy.elm.NoDataException
 import org.betsy.model.Dtc
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
@@ -67,6 +68,36 @@ class DtcDecoderTest {
     fun mode13IgnoresPaddingBeyondCountedList() {
         assertEquals(listOf("P3000"), DtcDecoder.decodeMode13("530130000000").map { it.code })
         assertEquals(emptyList<Dtc>(), DtcDecoder.decodeMode13("530000000000"))
+    }
+
+    @Test
+    fun mode13AcceptsACompleteElmLengthPrefixedListAndPadding() {
+        assertEquals(listOf("P3000"), DtcDecoder.decodeMode13("004530130000000").map { it.code })
+        assertEquals(emptyList<Dtc>(), DtcDecoder.decodeMode13("00253000000"))
+    }
+
+    @Test
+    fun mode13RejectsTagsInsideAnUnrelatedResponseOrAtANibbleBoundary() {
+        for (r in listOf("62005300", "15300", "005300", "AA5300", "620053013000")) {
+            assertThrows(NoDataException::class.java) { DtcDecoder.decodeMode13(r) }
+        }
+    }
+
+    @Test
+    fun mode13CannotReadACodeFromOutsideTheDeclaredMessage() {
+        assertThrows(NoDataException::class.java) { DtcDecoder.decodeMode13("00253013000") }
+    }
+
+    @Test
+    fun mode13RequiresTheEntireDeclaredMessageEvenWhenTheCountAlreadyFits() {
+        assertThrows(NoDataException::class.java) { DtcDecoder.decodeMode13("00653013000") }
+    }
+
+    @Test
+    fun mode13RejectsDeclaredLengthsWithoutACompleteHeader() {
+        for (r in listOf("0005300", "0015300")) {
+            assertThrows(NoDataException::class.java) { DtcDecoder.decodeMode13(r) }
+        }
     }
 
     @Test

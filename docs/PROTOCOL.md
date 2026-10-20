@@ -345,7 +345,11 @@ New raw keys: `7E2/0100`, `7E2/03`, `7E2/07`.
 `53 <count> <DTC 2B> …`, no per-DTC status byte. `5300` means zero stored codes. The count byte and all counted
 2-byte codes must be present. An incomplete list is a failed read, not a shorter or empty
 successful list; the reader retains the raw response and records a note. Trailing padding
-beyond the counted list is ignored.
+beyond the counted list is ignored. The positive service must start the application message;
+a matching byte sequence inside another response is not a DTC list. An optional three-digit
+ELM application-length prefix bounds the message: all declared bytes must arrive, and bytes
+outside that length cannot satisfy the count. This validates a single assembled response;
+it does not add collection of multiple application responses.
 
 ### 7.3 Letter mapping and parsing
 
