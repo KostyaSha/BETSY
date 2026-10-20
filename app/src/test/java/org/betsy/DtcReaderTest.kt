@@ -256,6 +256,58 @@ class DtcReaderTest {
     }
 
     @Test
+    fun freezePidRefusalsAndAdapterErrorsKeepRawAndDoNotStopOtherPids() {
+        for (failed in listOf("7F0212", "NO DATA", "CAN ERROR", "?", "4205017F", "420500")) {
+            val t = FakeTransport(gen2Base(mapOf("020500" to failed, "020C00" to "420C000000")))
+            val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+            assertEquals(failed, result.rawResponses.getValue("7E2/020500"))
+            assertEquals("420C000000", result.rawResponses.getValue("7E2/020C00"))
+            assertTrue(result.notes.any { it.contains("020500 on 7E2") })
+            if (failed == "7F0212") {
+                assertTrue(result.notes.any { it.contains("020500") && it.contains("sub-function not supported") })
+            }
+            assertTrue(t.commands.contains("21CA"))
+        }
+    }
+
+    @Test
+    fun freezePidTransportErrorIsLoggedWithoutCopyingThePreviousReply() {
+        val t =
+            FakeTransport(
+                gen2Base(mapOf("020400" to "42040080", "020C00" to "420C000000")),
+                throwOn = mapOf("020500" to TransportException("socket timed out")),
+            )
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertFalse(result.rawResponses.containsKey("7E2/020500"))
+        assertEquals("42040080", result.rawResponses.getValue("7E2/020400"))
+        assertEquals("420C000000", result.rawResponses.getValue("7E2/020C00"))
+        assertTrue(result.notes.any { it.contains("020500 on 7E2") && it.contains("socket timed out") })
+        assertTrue(t.commands.contains("21CA"))
+    }
+
+    @Test
+    fun freezeMaskFailureIsRetainedAndStopsFrameDiscoveryButNotInfReads() {
+        for (failed in listOf("7F0212", "NO DATA", "4200017E1F8803", "4200007E")) {
+            val t = FakeTransport(gen2Base(mapOf("020000" to failed)))
+            val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+            assertEquals(failed, result.rawResponses.getValue("7E2/020000"))
+            assertTrue(result.notes.any { it.contains("020000 on 7E2") })
+            assertFalse(t.commands.contains("020500"))
+            assertFalse(t.commands.contains("020001"))
+            assertTrue(t.commands.contains("21CA"))
+        }
+    }
+
+    @Test
+    fun freezeMaskTransportErrorDoesNotCreateARawReply() {
+        val t = FakeTransport(gen2Base(), throwOn = mapOf("020000" to TransportException("mask timeout")))
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertFalse(result.rawResponses.containsKey("7E2/020000"))
+        assertTrue(result.notes.any { it.contains("020000 on 7E2") && it.contains("mask timeout") })
+        assertTrue(t.commands.contains("21CA"))
+    }
+
+    @Test
     fun generic03StoresP0aa6From7eaLine() {
         val t =
             FakeTransport(

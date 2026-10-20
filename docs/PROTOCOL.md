@@ -518,6 +518,17 @@ them:
 Generic mode 02 is useful parallel evidence, but it is not the Toyota INF carrier. INF extraction
 uses the hybrid-control freeze pages described in §7.4.1 and §7.4.2.
 
+Every mode-02 reply, including negative responses and adapter errors, is retained under its
+ECU/request raw key before classification. Refusals and transport errors produce a note naming
+the ECU, request, and frame index; a failed PID does not stop the remaining PID reads. A
+transport exception has no received reply and must not copy the preceding command's response.
+The positive header must echo service, PID, and frame index; the mask requires all four mask
+bytes. Individual PID replies require at least one data byte. This is a minimum guard, not a
+full length or value decoder for every PID. A failed mask stops further frame discovery while
+subsequent INF reads continue. A refusal is evidence that the request was declined, not proof
+that the ECU contains no recorded faults.
+
+
 ### 7.5 Clearing
 
 Not implemented in this build. The wire command itself would be straightforward to add, but clearing is deliberately omitted for now. Everything in this build is a read: nothing clears a code, runs an actuator test, or writes to an ECU.

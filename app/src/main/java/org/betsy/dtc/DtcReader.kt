@@ -513,27 +513,13 @@ class DtcReader(
                     // reported as their own step so the slow walk keeps the progress bar moving.
                     val first = frame == 0
                     if (first) stage(SweepPhase.FREEZE_FRAME, "Freeze frame")
-                    val mask =
-                        try {
-                            session.rawCommand("0200$fr").also { raws[rawKey(header, "0200$fr")] = it }
-                        } catch (e: Exception) {
-                            notes += "Freeze frame $fr: ${e.message ?: e.toString()}"
-                            return@withEcu
-                        }
-                    val exists = Normalize.normalize(mask).startsWith("4200")
+                    val mask = readFreezeResponse(header, "0200$fr", notes, raws)
+                    val exists = mask != null
                     for (pid in FREEZE_FRAME_PIDS) {
                         if (first) stage(SweepPhase.FREEZE_FRAME, "Freeze frame · PID $pid")
                         if (!exists) continue
                         val cmd = "02$pid$fr"
-                        try {
-                            val raw = session.rawCommand(cmd)
-                            if (Normalize.normalize(raw).startsWith("42")) {
-                                raws[rawKey(header, cmd)] = raw
-                            }
-                        } catch (_: Exception) {
-                            // An absent PID is not a failure; the mask is advisory and cars
-                            // disagree with it. Silence here keeps notes about real problems.
-                        }
+                        readFreezeResponse(header, cmd, notes, raws)
                     }
                     // A frame that does not exist answers 7F or nothing; stop rather than
                     // hammering the bus for frames the ECU has already declined.
@@ -543,6 +529,40 @@ class DtcReader(
         } catch (e: Exception) {
             notes += "Freeze frame on $header: ${e.message ?: e.toString()}"
         }
+    }
+
+    /** Keep every received reply before classification; a transport failure has no reply to copy. */
+    private suspend fun readFreezeResponse(
+        header: String,
+        cmd: String,
+        notes: MutableList<String>,
+        raws: MutableMap<String, String>,
+    ): String? {
+        val label = "Freeze frame ${cmd.takeLast(2)} $cmd on $header"
+        val raw =
+            try {
+                session.rawCommand(cmd)
+            } catch (e: Exception) {
+                notes += "$label: ${e.message ?: e.toString()}"
+                return null
+            }
+        raws[rawKey(header, cmd)] = raw
+        val response = Normalize.normalize(raw)
+        NegativeResponse.parse(response)?.let {
+            notes += "$label: $it"
+            return null
+        }
+        val expected = "42${cmd.drop(2)}"
+        if (!response.startsWith(expected)) {
+            notes += "$label: unexpected response (expected $expected): ${raw.trim()}"
+            return null
+        }
+        val needed = if (cmd.substring(2, 4) == "00") expected.length + 8 else expected.length + 2
+        if (response.length < needed) {
+            notes += "$label: truncated response"
+            return null
+        }
+        return response
     }
 
     /** Match the responder at the start of an ATH1 line, never inside another ECU's payload. */
