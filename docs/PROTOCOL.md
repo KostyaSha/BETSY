@@ -188,7 +188,7 @@ only, so a unit toggle can never alter a decoded value. Speed follows the same p
 Two containers recur:
 
 ```
-u16 offset-binary:  value = u16 / 100 - 327.68      (volts, and °C)
+u16 offset-binary:  value = (u16 - 32768) / 100      (volts, amps)
 u8  half-scale:     value = u8 / 2                  (percent)
 ```
 
@@ -214,18 +214,23 @@ is a sensor value, not a section marker. Truncated CE data is rejected before up
 | Field | Location | Formula |
 |---|---|---|
 | SOC % | byte 0 | `u8 / 2` |
-| Pack current A | bytes 1–2 | `u16 / 100 - 327.68`, negative = discharge |
-| Block voltage `[0 .. min(N,17)-1]` | bytes 3+, 2 bytes each | `u16 / 100 - 327.68` |
+| Pack current A | bytes 1–2 | `(u16 - 32768) / 100`, negative = discharge |
+| Block voltage `[0 .. min(N,17)-1]` | bytes 3+, 2 bytes each | `(u16 - 32768) / 100` |
 
 **`21CF`**, if `N > 17`, blocks 18..N appear first; skip them. From offset `k`:
 
 | Field | Location | Formula |
 |---|---|---|
-| 12 V auxiliary | `k+3` | `u8 * 0.2 - 25.6` |
+| 12 V auxiliary | `k+3` | `(2 * u8 - 256) / 10` |
 | Max charge (hp) | `k+4` | `(u8 / 2 - 64) * 1.34` |
 | Max discharge (hp) | `k+5` | `(u8 / 2 - 64) * 1.34` |
 | ΔSOC | `k+6` | `u8 * 0.01` |
 | Temps TB1–TB3 °C | `k+10`, `k+12`, `k+14` | `u16 / 100 - 327.68` |
+
+For current and block voltages, subtract the integer midpoint before converting to floating
+point and dividing by 100. For auxiliary voltage, calculate `2 * raw - 256` as an integer
+before dividing by 10. This preserves the source decimal scale without subtracting two
+already-rounded floating-point values. It changes numerical rounding, not coefficients or signs.
 
 **`21D0`**, internal resistance, §4.1.
 

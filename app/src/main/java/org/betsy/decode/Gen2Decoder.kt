@@ -15,6 +15,9 @@ import org.betsy.model.BatteryModel
  * °C; unit conversion is a display-layer concern.
  */
 object Gen2Decoder {
+    /** Unsigned 16-bit midpoint encoding; the signed result is in hundredths of an amp or volt. */
+    private fun offsetBinaryHundredths(raw: Int): Float = (raw - 32768) / 100f
+
     /** The implemented P4 layout has 17 CE voltage words and at most 3 CF spillover words. */
     private const val MAX_BLOCK_COUNT = 20
 
@@ -38,11 +41,11 @@ object Gen2Decoder {
         val count = minOf(n, 17)
         Normalize.requireLength(r, i + 10 + count * 4, "21CE")
         m.soc = Normalize.u8(r, i + 4) / 2f
-        m.currentAmps = Normalize.u16(r, i + 6) / 100f - 327.68f
+        m.currentAmps = offsetBinaryHundredths(Normalize.u16(r, i + 6))
         val blocks = MutableList(n) { 0f }
         var k = i + 10 // blocks start right after current (§5.2)
         for (idx in 0 until count) {
-            blocks[idx] = Normalize.u16(r, k) / 100f - 327.68f
+            blocks[idx] = offsetBinaryHundredths(Normalize.u16(r, k))
             k += 4
         }
         m.blockVolts = blocks
@@ -61,13 +64,13 @@ object Gen2Decoder {
         if (n > 17) {
             // spillover blocks 18..N live at the start of this response (§5.2)
             for (idx in 17 until n) {
-                blocks[idx] = Normalize.u16(r, k) / 100f - 327.68f
+                blocks[idx] = offsetBinaryHundredths(Normalize.u16(r, k))
                 k += 4
             }
         }
         Normalize.requireLength(r, k + 36, "21CF")
         val s = if (fifteenBlockVariant) -4 else 0 // p044o1 scalars sit 4 hex chars earlier
-        m.aux12V = Normalize.u8(r, k + 6 + s) * 0.2f - 25.6f
+        m.aux12V = (Normalize.u8(r, k + 6 + s) * 2 - 256) / 10f
         m.maxChargeHp = (Normalize.u8(r, k + 8 + s) / 2f - 64f) * 1.34f
         m.maxDischargeHp = (Normalize.u8(r, k + 10 + s) / 2f - 64f) * 1.34f
         m.deltaSoc = Normalize.u8(r, k + 12 + s) * 0.01f
@@ -116,7 +119,7 @@ object Gen2Decoder {
         if (reported != n) throw NoDataException("21CED0CF: block count $reported does not match monitor count $n")
 
         m.soc = Normalize.u8(r, i + 4) / 2f
-        m.currentAmps = Normalize.u16(r, i + 6) / 100f - 327.68f
+        m.currentAmps = offsetBinaryHundredths(Normalize.u16(r, i + 6))
 
         val blocks = MutableList(n) { 0f }
         val ir = MutableList(n) { 0 }
@@ -124,7 +127,7 @@ object Gen2Decoder {
         var kR = d + 32 // "D0" tag + 15 bytes preamble, same +34 as standalone (§5.2)
         for (idx in 0 until n) {
             if (idx < 17) {
-                blocks[idx] = Normalize.u16(r, kV) / 100f - 327.68f
+                blocks[idx] = offsetBinaryHundredths(Normalize.u16(r, kV))
                 kV += 4
             }
             ir[idx] = Normalize.u8(r, kR)
@@ -134,12 +137,12 @@ object Gen2Decoder {
         var k = c + 2
         if (n > 17) {
             for (idx in 17 until n) {
-                blocks[idx] = Normalize.u16(r, k) / 100f - 327.68f
+                blocks[idx] = offsetBinaryHundredths(Normalize.u16(r, k))
                 k += 4
             }
         }
         val s = if (fifteenBlockVariant) -4 else 0
-        m.aux12V = Normalize.u8(r, k + 6 + s) * 0.2f - 25.6f
+        m.aux12V = (Normalize.u8(r, k + 6 + s) * 2 - 256) / 10f
         m.maxChargeHp = (Normalize.u8(r, k + 8 + s) / 2f - 64f) * 1.34f
         m.maxDischargeHp = (Normalize.u8(r, k + 10 + s) / 2f - 64f) * 1.34f
         m.deltaSoc = Normalize.u8(r, k + 12 + s) * 0.01f
