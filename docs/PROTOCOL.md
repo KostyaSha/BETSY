@@ -258,6 +258,12 @@ two 7.2 V modules, so a wrong offset yields 340 V or 0.15 V, not a subtly wrong 
 ### 5.6 Speed and RPM
 
 `010C0D` returns both in one reply: `41 0C <rpm u16> 0D <speed u8>`.
+The RPM record must start the application response, and speed must follow its complete two-byte
+value at the next PID boundary. A repeated `41` before `0D` remains accepted. Arbitrary
+substring matches, incomplete values, and missing bytes from an ELM-declared message are
+rejected before either model value is assigned. Bytes outside the declared message cannot
+supply the speed value; trailing padding after a complete message is ignored.
+
 
 **RPM is a u16 and must be divided by 4; speed is a single byte.** Reading `0x0D` as a u16 throws
 on every poll cycle and takes the whole live screen down with it. There is a regression fixture
