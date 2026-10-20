@@ -29,7 +29,7 @@ class ElmSession(
     /** Inter-command timeout, §6: 2500 ms for Gen2–Gen4.5, 8000 ms for Gen1 and Tahoe. */
     var commandTimeoutMs: Int = 2500
 
-    /** Raw text of the most recent response, kept for §3-style diagnostic breadcrumbs. */
+    /** Raw reply to the latest exchange attempt, or empty if that attempt returned no reply. */
     var lastRawResponse: String = ""
         private set
 
@@ -124,6 +124,7 @@ class ElmSession(
     suspend fun rawCommand(cmd: String): String {
         lock.lock()
         try {
+            lastRawResponse = ""
             transport.readTimeoutMs = commandTimeoutMs
             CaptureLog.log("ELM", ">> $cmd")
             val raw = transport.send(cmd)

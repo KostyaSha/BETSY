@@ -471,7 +471,10 @@ documented `(DTC, INF)` pairs for the DTCs reported by hybrid control:
 2. Several matching parents produce one shared explanation only when their full detail is equal.
 3. No match, or conflicting matches, remains unresolved.
 
-Raw pages stay beside every interpretation. Page order never selects a parent, and DTCs reported
+Raw pages stay beside every interpretation. A transport failure without a returned reply
+records an error note and no raw-response entry for that request. Session-level raw evidence
+is cleared before each exchange, so a timeout cannot copy the preceding page or header reply.
+Actual ECU refusals and adapter error text remain available as the current request's raw reply. Page order never selects a parent, and DTCs reported
 only by the engine or battery-control observation cannot acquire a hybrid-control INF explanation.
 Confirmation against other on-car DTCs and multi-fault combinations remains useful, but is not a
 precondition for deterministic pair resolution.

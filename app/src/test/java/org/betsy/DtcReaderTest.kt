@@ -456,6 +456,41 @@ class DtcReaderTest {
     }
 
     @Test
+    fun infTimeoutsDoNotCopyHeaderOrPreviousPageReplies() {
+        val valid = "61C7" + payload(29 to 0, 30 to 115)
+        val t =
+            FakeTransport(
+                gen2Base(mapOf("21C7" to valid)),
+                throwOn =
+                    mapOf(
+                        "21C6" to TransportException("first page timeout"),
+                        "21C8" to TransportException("later page timeout"),
+                    ),
+            )
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertFalse(result.rawResponses.containsKey("7E2/21C6"))
+        assertFalse(result.rawResponses.containsKey("7E2/21C8"))
+        assertEquals(valid, result.rawResponses.getValue("7E2/21C7"))
+        assertEquals(115, result.infCodes.single().code)
+        assertEquals(3, result.infTablesResponded)
+        assertTrue(result.notes.any { it.contains("21C6") && it.contains("first page timeout") })
+        assertTrue(result.notes.any { it.contains("21C8") && it.contains("later page timeout") })
+        assertTrue(t.commands.contains("21CA"))
+    }
+
+    @Test
+    fun infActualRefusalsAndAdapterErrorsStillKeepTheirOwnRawReplies() {
+        val t = FakeTransport(gen2Base(mapOf("21C7" to "7F2112", "21C8" to "NO DATA")))
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertEquals("7F2112", result.rawResponses.getValue("7E2/21C7"))
+        assertEquals("NO DATA", result.rawResponses.getValue("7E2/21C8"))
+        assertEquals(3, result.infTablesResponded)
+        assertTrue(result.notes.any { it.contains("21C7") && it.contains("sub-function not supported") })
+        assertTrue(result.notes.any { it.contains("21C8") && it.contains("NO DATA") })
+        assertTrue(t.commands.contains("21CA"))
+    }
+
+    @Test
     fun infTablesRespondedDropsFailedTables() {
         val t =
             FakeTransport(
