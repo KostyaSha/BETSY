@@ -84,6 +84,19 @@ class DtcReaderTest {
         )
 
     @Test
+    fun gen2TruncatedDtcListRetainsRawAndReportsFailure() {
+        for (raw in listOf("53", "5302", "53033000")) {
+            val t = FakeTransport(gen2Base(), byHeader = mapOf("7E2/13B0" to raw))
+            val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+            assertEquals(raw, result.rawResponses.getValue("7E2/13B0").trim())
+            assertTrue(result.notes.any { it.contains("13B0") && it.contains("truncated", ignoreCase = true) })
+            assertFalse(result.groups.any { it.source == DtcSource.HYBRID_CONTROL })
+            assertTrue(t.commands.contains("1380"))
+            assertTrue(t.commands.contains("21C6"))
+        }
+    }
+
+    @Test
     fun gen2SequenceIsLivenessThenKwpThenGenericThenInf() {
         val t = FakeTransport(gen2Base())
         awaitBlocking { reader(t, VehicleModel.GEN2).read() }

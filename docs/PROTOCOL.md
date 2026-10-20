@@ -342,8 +342,10 @@ New raw keys: `7E2/0100`, `7E2/03`, `7E2/07`.
 
 ### 7.2 Response layout
 
-`53 <count> <DTC 2B> …`, no per-DTC status byte. `5300` means zero stored codes. Where the count
-overstates the body, trust the body length.
+`53 <count> <DTC 2B> …`, no per-DTC status byte. `5300` means zero stored codes. The count byte and all counted
+2-byte codes must be present. An incomplete list is a failed read, not a shorter or empty
+successful list; the reader retains the raw response and records a note. Trailing padding
+beyond the counted list is ignored.
 
 ### 7.3 Letter mapping and parsing
 

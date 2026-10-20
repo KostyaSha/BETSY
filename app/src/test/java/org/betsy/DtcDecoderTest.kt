@@ -43,11 +43,30 @@ class DtcDecoderTest {
         assertEquals(emptyList<Dtc>(), DtcDecoder.decodeMode13("5300"))
     }
 
+    @Test(expected = NoDataException::class)
+    fun mode13RejectsPartialList() {
+        DtcDecoder.decodeMode13("53033000")
+    }
+
+    @Test(expected = NoDataException::class)
+    fun mode13RejectsMissingCount() {
+        DtcDecoder.decodeMode13("53")
+    }
+
+    @Test(expected = NoDataException::class)
+    fun mode13RejectsMissingBody() {
+        DtcDecoder.decodeMode13("5302")
+    }
+
+    @Test(expected = NoDataException::class)
+    fun mode13RejectsIncompleteCode() {
+        DtcDecoder.decodeMode13("530130")
+    }
+
     @Test
-    fun mode13CountOverstatesLengthIsTrustedDown() {
-        // count says 3 but only 1 DTC fits; must not read past the end.
-        val r = "53033000"
-        assertEquals(listOf("P3000"), DtcDecoder.decodeMode13(r).map { it.code })
+    fun mode13IgnoresPaddingBeyondCountedList() {
+        assertEquals(listOf("P3000"), DtcDecoder.decodeMode13("530130000000").map { it.code })
+        assertEquals(emptyList<Dtc>(), DtcDecoder.decodeMode13("530000000000"))
     }
 
     @Test
