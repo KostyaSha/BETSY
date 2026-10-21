@@ -587,6 +587,16 @@ subsequent INF reads continue. A refusal is evidence that the request was declin
 that the ECU contains no recorded faults.
 
 
+The generic DTC reader checks the ATH1 acknowledgement before issuing `$03`/`$07`.
+ATH1 and ATH0 each require a complete trimmed `OK` response (case-insensitive), with no
+additional retries. An unconfirmed ATH1 skips that generic request and creates an error note.
+ATH0 restoration is attempted even if enabling headers failed. A rejected restoration or
+transport exception is reported separately without hiding the original error or discarding
+an already decoded generic result. AT acknowledgements are never stored as ECU replies.
+A failed ATH0 does not confirm the format for subsequent reads; reconnect or restore the
+adapter configuration before trusting later headerless reads. This change reports the error;
+it does not add automatic recovery or block all subsequent sweep requests.
+
 Generic `$03`/`$07` parsing with ATH1 requires exactly one matching `7EA` single-frame
 line. If additional `7EA` lines arrive, the reader retains the entire raw exchange and reports
 that multiple responses were not decoded; it must not silently present the first line as the

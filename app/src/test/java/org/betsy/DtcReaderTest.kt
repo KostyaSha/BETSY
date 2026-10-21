@@ -390,6 +390,54 @@ class DtcReaderTest {
     }
 
     @Test
+    fun rejectedAth1SkipsGenericRequestsAndStillAttemptsAth0() {
+        for (raw in listOf("?", "NO DATA", "NOT OK", "")) {
+            val t = FakeTransport(gen2Base(mapOf("ATH1" to raw)))
+            val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+            assertFalse(t.commands.contains("03"))
+            assertFalse(t.commands.contains("07"))
+            assertFalse(result.rawResponses.containsKey("7E2/03"))
+            assertFalse(result.rawResponses.containsKey("7E2/07"))
+            assertTrue(result.notes.any { it.contains("Generic DTCs (03)") && it.contains("ATH1") })
+            assertTrue(result.notes.any { it.contains("Generic DTCs (07)") && it.contains("ATH1") })
+            assertEquals(2, t.commands.count { it == "ATH0" })
+            assertTrue(t.commands.contains("21CA"))
+        }
+    }
+
+    @Test
+    fun rejectedAth0IsReportedWithoutDiscardingTheDtcReply() {
+        for (raw in listOf("?", "NO DATA", "NOT OK", "")) {
+            val dtc = "7EA 04 43 01 0A A6"
+            val t = FakeTransport(gen2Base(mapOf("ATH0" to raw, "03" to dtc)))
+            val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+            assertEquals(listOf("P0AA6"), result.storedGenericDtcs.map { it.code })
+            assertEquals(dtc, result.rawResponses.getValue("7E2/03"))
+            assertTrue(result.notes.any { it.contains("Generic DTCs (03)") && it.contains("restoring ATH0") })
+            assertTrue(result.notes.any { it.contains("Generic DTCs (07)") && it.contains("restoring ATH0") })
+        }
+    }
+
+    @Test
+    fun athFailuresRetainBothThePrimaryAndCleanupErrors() {
+        val t =
+            FakeTransport(
+                gen2Base(),
+                throwOn =
+                    mapOf(
+                        "ATH1" to TransportException("header enable timeout"),
+                        "ATH0" to TransportException("header restore timeout"),
+                    ),
+            )
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertFalse(t.commands.contains("03"))
+        assertFalse(t.commands.contains("07"))
+        assertEquals(2, t.commands.count { it == "ATH0" })
+        assertTrue(result.notes.any { it.contains("Generic DTCs (03)") && it.contains("header enable timeout") })
+        assertTrue(result.notes.any { it.contains("Generic DTCs (03)") && it.contains("header restore timeout") })
+    }
+
+    @Test
     fun generic03StoresP0aa6From7eaLine() {
         val t =
             FakeTransport(

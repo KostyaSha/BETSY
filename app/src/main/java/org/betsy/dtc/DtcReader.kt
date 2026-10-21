@@ -7,6 +7,7 @@ import org.betsy.decode.InfLayout
 import org.betsy.decode.InfMeaning
 import org.betsy.detect.VehicleInfo
 import org.betsy.detect.VehicleModel
+import org.betsy.elm.ElmException
 import org.betsy.elm.ElmSession
 import org.betsy.elm.NegativeResponse
 import org.betsy.elm.NegativeResponseException
@@ -414,8 +415,8 @@ class DtcReader(
         return try {
             session.withEcu(header) {
                 stage(SweepPhase.GENERIC_OBD, "Generic DTCs (\$$cmd)")
-                session.rawCommand("ATH1")
                 try {
+                    setCanResponseHeaders(true)
                     val raw = rawDiagnosticCommand(header, cmd, raws)
                     val lines = rawLinesFromCanId(raw, "7EA")
                     val line = lines.firstOrNull()
@@ -472,16 +473,24 @@ class DtcReader(
                     }
                 } finally {
                     try {
-                        session.rawCommand("ATH0")
-                    } catch (_: Exception) {
-                        // adapter already in bad state; don't let cleanup failure
-                        // propagate and leave ATH1 on for the next sweep
+                        setCanResponseHeaders(false)
+                    } catch (e: Exception) {
+                        notes += "Generic DTCs ($cmd) restoring ATH0: ${e.message ?: e.toString()}"
                     }
                 }
             }
         } catch (e: Exception) {
             notes += "Generic DTCs ($cmd): ${e.message ?: e.toString()}"
             emptyList()
+        }
+    }
+
+    /** One AT exchange; an unconfirmed format change is a session error, not ECU data. */
+    private suspend fun setCanResponseHeaders(enabled: Boolean) {
+        val cmd = if (enabled) "ATH1" else "ATH0"
+        val raw = session.rawCommand(cmd)
+        if (!raw.trim().equals("OK", ignoreCase = true)) {
+            throw ElmException("$cmd: expected OK (response: ${raw.trim()})")
         }
     }
 
