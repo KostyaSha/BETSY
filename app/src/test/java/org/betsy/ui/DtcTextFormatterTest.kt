@@ -14,6 +14,15 @@ import org.junit.Test
 
 class DtcTextFormatterTest {
     @Test
+    fun incompleteEnhancedReadsCannotProduceAnEmptyStoredCodeClaim() {
+        assertEquals("No stored codes reported.", DtcTextFormatter.enhancedReadSummary(true))
+        val incomplete = DtcTextFormatter.enhancedReadSummary(false)
+        assertTrue(incomplete.contains("Read incomplete"))
+        assertTrue(incomplete.contains("not fully confirmed"))
+        assertFalse(incomplete.contains("No stored codes"))
+    }
+
+    @Test
     fun twoFaultsStillShowTheOneExactExplanation() {
         val groups =
             listOf(

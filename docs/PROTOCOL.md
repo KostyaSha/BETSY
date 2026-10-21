@@ -331,6 +331,14 @@ must not copy the preceding ECU's reply or an ATSH acknowledgement into that key
 responses remain errors and are not decoded as an empty successful DTC list. Partial
 transport replies remain incomplete evidence, even when their bytes look like a valid list.
 
+Enhanced DTC completeness is tracked separately from whether any codes were found. Only
+successful decoding of every planned enhanced request confirms an empty stored-code result.
+A header-setup failure, refusal, transport error, or malformed list marks the read incomplete;
+already found codes remain visible. The result card then reports unconfirmed stored-code
+status, and an explicit incomplete-read note travels in the existing capture notes. Failures
+of supplemental generic, freeze-frame, or INF reads do not change enhanced DTC completeness.
+`hasStoredDtcs` still means codes were found, not that every ECU was read successfully.
+
 Service `0A` is generic OBD-II permanent-DTC storage and is unrelated to Toyota INF detail codes.
 
 **Engine path (*inferred*; confirm on-car).** Physical ECM header `7E0`,

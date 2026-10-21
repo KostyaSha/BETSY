@@ -109,6 +109,8 @@ data class DtcReadResult(
     val pendingGenericDtcs: List<Dtc> = emptyList(),
     /** How many of the five INF pages returned a positive response (did not throw). */
     val infTablesResponded: Int = 0,
+    /** Every planned enhanced DTC request decoded successfully; independent of found codes. */
+    val enhancedDtcReadsComplete: Boolean = false,
 ) {
     /**
      * Toyota enhanced (KWP2000 groups + INF) only. Generic $03/$07 do **not** count: a clean
@@ -222,62 +224,70 @@ class DtcReader(
             CaptureLog.log("DTC", "liveness 7E2: responding=${liveness.responding} ${liveness.detail}")
         }
 
-        when (info.model) {
-            VehicleModel.GEN3 ->
-                readDtcGroup(
-                    DtcSource.HYBRID_CONTROL,
-                    "HV ECU (7E2)",
-                    "7E2",
-                    listOf("0A" to { DtcDecoder.decodeMode0A(it) }, "13B0" to { DtcDecoder.decodeMode13(it) }),
-                    groups,
-                    notes,
-                    raws,
-                )
-            VehicleModel.GEN2 -> {
-                readDtcGroup(
-                    DtcSource.HYBRID_CONTROL,
-                    "HV ECU (7E2)",
-                    "7E2",
-                    listOf("13B0" to { DtcDecoder.decodeMode13(it) }),
-                    groups,
-                    notes,
-                    raws,
-                )
-                readDtcGroup(
-                    DtcSource.BATTERY_CONTROL,
-                    "Battery ECU (7E3)",
-                    "7E3",
-                    listOf("1380" to { DtcDecoder.decodeMode13(it) }),
-                    groups,
-                    notes,
-                    raws,
-                )
-            }
-            VehicleModel.GEN2_7E2 ->
-                readDtcGroups(
-                    "7E2",
-                    listOf(
-                        GroupRead(
+        val hybridBatteryComplete =
+            when (info.model) {
+                VehicleModel.GEN3 ->
+                    readDtcGroup(
+                        DtcSource.HYBRID_CONTROL,
+                        "HV ECU (7E2)",
+                        "7E2",
+                        listOf("0A" to { DtcDecoder.decodeMode0A(it) }, "13B0" to { DtcDecoder.decodeMode13(it) }),
+                        groups,
+                        notes,
+                        raws,
+                    )
+                VehicleModel.GEN2 -> {
+                    val hybridComplete =
+                        readDtcGroup(
                             DtcSource.HYBRID_CONTROL,
                             "HV ECU (7E2)",
+                            "7E2",
                             listOf("13B0" to { DtcDecoder.decodeMode13(it) }),
-                        ),
-                        GroupRead(
+                            groups,
+                            notes,
+                            raws,
+                        )
+                    val batteryComplete =
+                        readDtcGroup(
                             DtcSource.BATTERY_CONTROL,
-                            "Battery ECU (7E2)",
+                            "Battery ECU (7E3)",
+                            "7E3",
                             listOf("1380" to { DtcDecoder.decodeMode13(it) }),
+                            groups,
+                            notes,
+                            raws,
+                        )
+                    hybridComplete && batteryComplete
+                }
+                VehicleModel.GEN2_7E2 ->
+                    readDtcGroups(
+                        "7E2",
+                        listOf(
+                            GroupRead(
+                                DtcSource.HYBRID_CONTROL,
+                                "HV ECU (7E2)",
+                                listOf("13B0" to { DtcDecoder.decodeMode13(it) }),
+                            ),
+                            GroupRead(
+                                DtcSource.BATTERY_CONTROL,
+                                "Battery ECU (7E2)",
+                                listOf("1380" to { DtcDecoder.decodeMode13(it) }),
+                            ),
                         ),
-                    ),
-                    groups,
-                    notes,
-                    raws,
+                        groups,
+                        notes,
+                        raws,
+                    )
+                else -> throw UnsupportedOperationException(
+                    "${info.model.label} DTC read is not supported in this build",
                 )
-            else -> throw UnsupportedOperationException(
-                "${info.model.label} DTC read is not supported in this build",
-            )
-        }
+            }
         // Always attempt the ECM so a fuse-test U0293 is not invisible when 7E2 INF is empty.
-        readEngineDtcs(groups, notes, raws)
+        val engineComplete = readEngineDtcs(groups, notes, raws)
+        val enhancedComplete = hybridBatteryComplete && engineComplete
+        if (!enhancedComplete) {
+            notes += "Toyota enhanced DTC read incomplete; stored-code status is not fully confirmed."
+        }
 
         if (gen2Family) {
             // Generic OBD after Toyota KWP groups, before INF. $07 is supplemental only.
@@ -312,6 +322,7 @@ class DtcReader(
             storedGenericDtcs = storedGeneric,
             pendingGenericDtcs = pendingGeneric,
             infTablesResponded = infResponded,
+            enhancedDtcReadsComplete = enhancedComplete,
         )
     }
 
@@ -621,7 +632,7 @@ class DtcReader(
         groups: MutableList<DtcGroup>,
         notes: MutableList<String>,
         raws: MutableMap<String, String>,
-    ) {
+    ): Boolean {
         val cmds =
             when (info.model) {
                 VehicleModel.GEN3 ->
@@ -631,9 +642,9 @@ class DtcReader(
                     )
                 VehicleModel.GEN2, VehicleModel.GEN2_7E2 ->
                     listOf("13B0" to { r: String -> DtcDecoder.decodeMode13(r) })
-                else -> return
+                else -> return false
             }
-        readDtcGroup(DtcSource.ENGINE, "Engine ECU (7E0)", "7E0", cmds, groups, notes, raws)
+        return readDtcGroup(DtcSource.ENGINE, "Engine ECU (7E0)", "7E0", cmds, groups, notes, raws)
     }
 
     /** Reads one labeled group: sets the header, runs each command, dedupes its codes. */
@@ -654,7 +665,8 @@ class DtcReader(
         groups: MutableList<DtcGroup>,
         notes: MutableList<String>,
         raws: MutableMap<String, String>,
-    ) {
+    ): Boolean {
+        var complete = true
         try {
             session.withEcu(header) {
                 for (read in reads) {
@@ -667,6 +679,7 @@ class DtcReader(
                                 raws[rawKey(header, cmd)] = raw
                                 parse(raw)
                             } catch (e: Exception) {
+                                complete = false
                                 retainPartialReply(e, header, cmd, raws)
                                 // The session clears this before each exchange, so refusals and
                                 // adapter errors retain their own bytes, never the previous reply.
@@ -682,8 +695,10 @@ class DtcReader(
                 }
             }
         } catch (e: Exception) {
+            complete = false
             notes += "DTC read on $header: ${e.message ?: e.toString()}"
         }
+        return complete
     }
 
     /**

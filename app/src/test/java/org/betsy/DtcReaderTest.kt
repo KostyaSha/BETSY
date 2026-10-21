@@ -84,6 +84,62 @@ class DtcReaderTest {
         )
 
     @Test
+    fun enhancedDtcCompletenessRequiresEveryGen2EcuToDecode() {
+        for (key in listOf("7E2/13B0", "7E3/1380", "7E0/13B0")) {
+            for (raw in listOf("7F1312", "NO DATA", "53010A", "62005300")) {
+                val t = FakeTransport(gen2Base(), byHeader = mapOf(key to raw))
+                val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+                assertTrue(result.groups.isEmpty())
+                assertFalse(key, result.enhancedDtcReadsComplete)
+                assertTrue(result.notes.any { it.contains("Toyota enhanced DTC read incomplete") })
+                assertTrue(t.commands.contains("21CA"))
+            }
+        }
+    }
+
+    @Test
+    fun enhancedDtcCompletenessIncludesHeaderAndTransportFailures() {
+        for (cmd in listOf("ATSH7E2", "ATSH7E3", "ATSH7E0", "13B0", "1380")) {
+            val t = FakeTransport(gen2Base(), throwOn = mapOf(cmd to TransportException("timeout")))
+            val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+            assertFalse(cmd, result.enhancedDtcReadsComplete)
+            assertTrue(result.notes.any { it.contains("Toyota enhanced DTC read incomplete") })
+        }
+    }
+
+    @Test
+    fun enhancedDtcCompletenessDoesNotDependOnSupplementalFailuresOrFoundCodes() {
+        for (dtc in listOf("5300", "53010AA6")) {
+            val t =
+                FakeTransport(
+                    gen2Base(mapOf("03" to "7EA 03 7F 03 11", "020000" to "NO DATA", "21C6" to "NO DATA")),
+                    byHeader = mapOf("7E2/13B0" to dtc),
+                )
+            val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+            assertTrue(result.enhancedDtcReadsComplete)
+            assertTrue(result.notes.isNotEmpty())
+            assertFalse(result.notes.any { it.contains("Toyota enhanced DTC read incomplete") })
+            assertEquals(dtc != "5300", result.hasStoredDtcs)
+        }
+    }
+
+    @Test
+    fun incompleteDtcReadRetainsConfirmedCodesAndExportsTheWarning() {
+        val t =
+            FakeTransport(
+                gen2Base(),
+                byHeader = mapOf("7E2/13B0" to "53010AA6", "7E3/1380" to "7F1312"),
+            )
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertFalse(result.enhancedDtcReadsComplete)
+        assertTrue(result.hasStoredDtcs)
+        assertEquals(listOf("P0AA6"), result.groups.flatMap { it.codes }.map { it.code })
+        val capture = CaptureData.from(result, vehicleInfo(VehicleModel.GEN2), "test", "test", "test")
+        assertTrue(capture.notes.any { it.contains("Toyota enhanced DTC read incomplete") })
+        assertEquals(result.rawResponses, capture.raw)
+    }
+
+    @Test
     fun gen2ZeroDtcWordsDoNotCreateFaultGroupsButRawRepliesRemain() {
         val t = FakeTransport(gen2Base(mapOf("13B0" to "53010000", "1380" to "53010000")))
         val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }

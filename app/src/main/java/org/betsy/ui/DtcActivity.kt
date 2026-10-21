@@ -374,15 +374,14 @@ class DtcActivity : Activity() {
                 .filterIsInstance<InfMeaning.Resolution.Exact>()
                 .groupBy { it.dtc }
 
-        if (result.groups.isEmpty()) {
+        if (result.groups.isEmpty() || !result.enhancedDtcReadsComplete) {
             resultsHost.addView(
-                metaCard("Toyota enhanced", "No stored codes reported."),
+                metaCard("Toyota enhanced", DtcTextFormatter.enhancedReadSummary(result.enhancedDtcReadsComplete)),
             )
-        } else {
-            for (group in result.groups) {
-                for (dtc in group.codes) {
-                    resultsHost.addView(faultCard(group.label, dtc, exactByParent[dtc.code].orEmpty()))
-                }
+        }
+        for (group in result.groups) {
+            for (dtc in group.codes) {
+                resultsHost.addView(faultCard(group.label, dtc, exactByParent[dtc.code].orEmpty()))
             }
         }
 

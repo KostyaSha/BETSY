@@ -9,6 +9,13 @@ import org.betsy.model.InfDetail
 
 /** Pure text formatting for enhanced DTCs and their retained INF relationships. */
 internal object DtcTextFormatter {
+    fun enhancedReadSummary(readsComplete: Boolean): String =
+        if (readsComplete) {
+            "No stored codes reported."
+        } else {
+            "Read incomplete. Stored-code status is not fully confirmed; see scan notes."
+        }
+
     fun formatGroups(
         groups: List<DtcGroup>,
         resolutions: List<InfMeaning.Resolution>,
