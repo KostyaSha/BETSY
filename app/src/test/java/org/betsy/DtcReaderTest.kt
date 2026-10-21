@@ -141,6 +141,30 @@ class DtcReaderTest {
     }
 
     @Test
+    fun captureExportsEnhancedCompletionIndependentlyOfFoundDtcs() {
+        for (complete in listOf(false, true)) {
+            for (fault in listOf(false, true)) {
+                val t =
+                    FakeTransport(
+                        gen2Base(),
+                        byHeader =
+                            mapOf(
+                                "7E2/13B0" to if (fault) "53010AA6" else "5300",
+                                "7E3/1380" to if (complete) "5300" else "NO DATA",
+                            ),
+                    )
+                val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+                val capture = CaptureData.from(result, vehicleInfo(VehicleModel.GEN2), "test", "test", "test")
+                val json = JSONObject(capture.toJson())
+                assertEquals(complete, json.getBoolean("enhancedDtcReadsComplete"))
+                assertEquals(fault, json.getBoolean("hasStoredDtcs"))
+                if (!complete) assertEquals("NO DATA", json.getJSONObject("raw").getString("7E3/1380"))
+                assertEquals(result.notes, capture.notes)
+            }
+        }
+    }
+
+    @Test
     fun enhancedDtcCompletenessRequiresEveryGen2EcuToDecode() {
         for (key in listOf("7E2/13B0", "7E3/1380", "7E0/13B0")) {
             for (raw in listOf("7F1312", "NO DATA", "53010A", "62005300")) {

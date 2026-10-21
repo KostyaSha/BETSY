@@ -73,6 +73,8 @@ data class CaptureData(
      * session has ended.
      */
     val demo: Boolean = false,
+    /** All planned enhanced DTC reads completed; finding no codes alone does not establish this. */
+    val enhancedDtcReadsComplete: Boolean = false,
 ) {
     /**
      * Serialize for upload.
@@ -102,6 +104,7 @@ data class CaptureData(
                 },
             ).put("logTail", JSONArray(Redact.vin(logTail)))
             .put("hasStoredDtcs", hasStoredDtcs)
+            .put("enhancedDtcReadsComplete", enhancedDtcReadsComplete)
             .put("ownerNotes", ownerNotes)
             // Always false: anything the app sends came off a car. The flag exists so test
             // harnesses can mark their own submissions, which keeps a healthy real car filed as
@@ -156,6 +159,7 @@ data class CaptureData(
                         if (result.hasStoredDtcs) LOG_LINES_FAULT else LOG_LINES_CLEAN,
                     ),
                 hasStoredDtcs = result.hasStoredDtcs,
+                enhancedDtcReadsComplete = result.enhancedDtcReadsComplete,
                 ownerNotes = ownerNotes,
             )
     }

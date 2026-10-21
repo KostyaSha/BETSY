@@ -675,3 +675,18 @@ and transport failures keep their existing evidence and notes handling. The tran
 prompt is consumed as a delimiter and is not part of the returned raw response; existing VIN
 redaction still applies during export. Covered by synthetic formatted NHW20 replies and JSON
 round-trip checks; no new on-car verification or change to formulas or ECU requests.
+
+### Enhanced DTC completion in shared captures
+
+Export `enhancedDtcReadsComplete` separately from `hasStoredDtcs`. The first reports whether
+all planned enhanced DTC reads completed; the second reports whether any stored DTC was found.
+Neither supplemental generic reads nor INF decoding determine enhanced-read completion.
+A failed scan with no found codes must not be labelled a no-fault or healthy-car baseline.
+
+The capture worker records `enhanced_dtc_reads_complete` and marks incomplete reads explicitly,
+while retaining found DTCs, raw responses, and notes. Older payloads without this field remain
+accepted with completion `null` (unknown), never assumed complete. The existing `fault` metadata
+still means stored DTCs were found, not that absence of faults was confirmed. A completed empty
+scan is described only as no stored DTCs from the completed enhanced reads, not a full-vehicle
+health check. These are client/export status rules, tested locally with synthetic scans and
+mocked uploads; no new ECU requests or on-car verification.
