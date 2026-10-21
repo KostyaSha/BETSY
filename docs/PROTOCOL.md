@@ -650,3 +650,15 @@ application responses remain unimplemented; this guard does not add either capab
 ### 7.5 Clearing
 
 Not implemented in this build. The wire command itself would be straightforward to add, but clearing is deliberately omitted for now. Everything in this build is a read: nothing clears a code, runs an actuator test, or writes to an ECU.
+
+### INF display and ECU source
+
+The `21C6`–`21CA` pages read on `7E2` are hybrid-control snapshot evidence. The reader
+resolves documented INF candidates against hybrid-control DTCs only. Preserve that source
+restriction in both fault cards and text formatting: an identical DTC number reported by
+Engine (`7E0`) or HV Battery (`7E3`) must not inherit a hybrid INF value or its explanation.
+Use structured `DtcSource`, never a translated ECU label, for this decision. Keep all
+original DTC groups and raw snapshot pages. This corrects presentation of existing candidate
+resolutions; it does not prove page ownership, add a new matching algorithm, or change any
+request, formula, or shared-INF resolution. Covered by synthetic duplicate-code tests;
+no new on-car verification.

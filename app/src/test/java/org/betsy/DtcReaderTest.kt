@@ -138,6 +138,23 @@ class DtcReaderTest {
     }
 
     @Test
+    fun duplicateEcuDtcWordsRetainTheirSourcesAndOnlyOneHybridInfExplanation() {
+        val t =
+            FakeTransport(
+                gen2Base(mapOf("13B0" to "53010AA6", "1380" to "53010AA6", "21C6" to "61C6" + payload(29 to 2, 30 to 0x64))),
+            )
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertTrue(result.enhancedDtcReadsComplete)
+        assertEquals(setOf(DtcSource.ENGINE, DtcSource.HYBRID_CONTROL, DtcSource.BATTERY_CONTROL), result.groups.map { it.source }.toSet())
+        assertEquals(3, result.groups.flatMap { it.codes }.size)
+        val text =
+            org.betsy.ui.DtcTextFormatter
+                .formatGroups(result.groups, result.infResolutions)
+        assertEquals(1, text.lines().count { it == "  P0AA6-612" })
+        assertEquals("61C6" + payload(29 to 2, 30 to 0x64), result.rawResponses.getValue("7E2/21C6"))
+    }
+
+    @Test
     fun incompleteDtcReadRetainsConfirmedCodesAndExportsTheWarning() {
         val t =
             FakeTransport(
