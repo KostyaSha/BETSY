@@ -688,9 +688,9 @@ class DtcReader(
                     for ((cmd, parse) in read.commands) {
                         codes +=
                             try {
-                                val raw = session.command(cmd)
-                                raws[rawKey(header, cmd)] = raw
-                                parse(raw)
+                                val response = session.command(cmd)
+                                raws[rawKey(header, cmd)] = session.lastRawResponse
+                                parse(response)
                             } catch (e: Exception) {
                                 complete = false
                                 retainPartialReply(e, header, cmd, raws)
@@ -758,10 +758,10 @@ class DtcReader(
                 for (table in InfLayout.tables) {
                     stage(SweepPhase.INF_CODES, "INF ${table.request}")
                     try {
-                        val raw = session.command(table.request)
-                        raws[rawKey("7E2", table.request)] = raw
-                        CaptureLog.log("DTC", "INF raw ${table.request} -> $raw")
-                        active += InfDecoder.decodeActive(raw, table)
+                        val response = session.command(table.request)
+                        raws[rawKey("7E2", table.request)] = session.lastRawResponse
+                        CaptureLog.log("DTC", "INF normalized ${table.request} -> $response")
+                        active += InfDecoder.decodeActive(response, table)
                         responded++
                     } catch (e: NegativeResponseException) {
                         notes += "INF ${table.request} on 7E2: ${e.response.meaning}"

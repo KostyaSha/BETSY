@@ -662,3 +662,16 @@ original DTC groups and raw snapshot pages. This corrects presentation of existi
 resolutions; it does not prove page ownership, add a new matching algorithm, or change any
 request, formula, or shared-INF resolution. Covered by synthetic duplicate-code tests;
 no new on-car verification.
+
+### Verbatim enhanced DTC and INF capture evidence
+
+For enhanced DTC and INF reads, save the adapter's original response in the capture `raw`
+map before decoding. Preserve whitespace, letter case, ELM length prefixes, and indexed
+continuation lines, both for valid replies and replies that later fail parsing. Pass the
+normalized application string separately to the existing decoder. Reading `lastRawResponse`
+and saving it remain inside the same ECU command group lock, so another exchange cannot
+replace the evidence between command completion and insertion. ECU refusals, adapter errors,
+and transport failures keep their existing evidence and notes handling. The transport's `>`
+prompt is consumed as a delimiter and is not part of the returned raw response; existing VIN
+redaction still applies during export. Covered by synthetic formatted NHW20 replies and JSON
+round-trip checks; no new on-car verification or change to formulas or ECU requests.

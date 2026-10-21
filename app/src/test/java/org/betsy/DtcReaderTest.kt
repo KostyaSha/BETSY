@@ -10,6 +10,7 @@ import org.betsy.elm.ElmSession
 import org.betsy.transport.ElmTransport
 import org.betsy.transport.TransportException
 import org.betsy.transport.awaitBlocking
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -82,6 +83,62 @@ class DtcReaderTest {
             supported = true,
             blockCount = 14,
         )
+
+    private fun elmFrames(body: String): String =
+        "\r\n%03X\r\n".format(body.length / 2) +
+            body
+                .chunked(14)
+                .mapIndexed { index, chunk ->
+                    "%X: %s".format(index, chunk.chunked(2).joinToString(" ").lowercase())
+                }.joinToString("\r\n") + "\r\n"
+
+    @Test
+    fun successfulEnhancedAndInfRepliesRemainVerbatimInCaptures() {
+        val hybrid = elmFrames("53010AA6")
+        val engine = "\r\n53 01 05 71\r\n"
+        val battery = "\r\n53 00\r\n"
+        val inf = elmFrames("61C6" + payload(29 to 2, 30 to 0x64))
+        val t =
+            FakeTransport(
+                gen2Base(mapOf("1380" to battery, "21C6" to inf)),
+                byHeader = mapOf("7E2/13B0" to hybrid, "7E0/13B0" to engine),
+            )
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertTrue(result.enhancedDtcReadsComplete)
+        assertEquals(listOf("P0AA6", "P0571"), result.groups.flatMap { it.codes }.map { it.code })
+        assertEquals(612, result.infCodes.single().code)
+        assertEquals(5, result.infTablesResponded)
+        val expected = mapOf("7E2/13B0" to hybrid, "7E0/13B0" to engine, "7E3/1380" to battery, "7E2/21C6" to inf)
+        val capture = CaptureData.from(result, vehicleInfo(VehicleModel.GEN2), "test", "test", "test")
+        val exported = JSONObject(capture.toJson()).getJSONObject("raw")
+        for ((key, raw) in expected) {
+            assertEquals(key, raw, result.rawResponses.getValue(key))
+            assertEquals(key, raw, capture.raw.getValue(key))
+            assertEquals(key, raw, exported.getString(key))
+        }
+    }
+
+    @Test
+    fun malformedEnhancedAndInfRepliesKeepOriginalFormattingBeforeDecodeFails() {
+        val dtc = "\r\n53 02 0a a6\r\n"
+        val inf = elmFrames("61C7" + payload(29 to 0, 30 to 115).dropLast(2))
+        val t =
+            FakeTransport(
+                gen2Base(mapOf("13B0" to dtc, "1380" to dtc, "21C7" to inf, "21CA" to "61CA" + payload(29 to 0, 30 to 115))),
+            )
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertFalse(result.enhancedDtcReadsComplete)
+        assertTrue(result.groups.isEmpty())
+        for (key in listOf("7E2/13B0", "7E0/13B0", "7E3/1380")) {
+            assertEquals(key, dtc, result.rawResponses.getValue(key))
+        }
+        assertEquals(inf, result.rawResponses.getValue("7E2/21C7"))
+        assertEquals(4, result.infTablesResponded)
+        assertEquals(115, result.infCodes.single().code)
+        assertTrue(result.notes.any { it.contains("13B0") && it.contains("truncated") })
+        assertTrue(result.notes.any { it.contains("21C7") && it.contains("truncated") })
+        assertTrue(t.commands.contains("21CA"))
+    }
 
     @Test
     fun enhancedDtcCompletenessRequiresEveryGen2EcuToDecode() {
