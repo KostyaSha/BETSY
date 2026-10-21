@@ -90,16 +90,13 @@ class ElmSession(
     /** Issues an OBD request and returns the §2-normalized response R. */
     suspend fun command(cmd: String): String {
         val raw = rawCommand(cmd)
-        if (raw.contains('?')) {
+        val status = AdapterStatus.find(raw)
+        if (status == "?") {
             val e = ElmException("adapter rejected command '$cmd'")
             CaptureLog.logThrowable("ELM", e)
             throw e
         }
-        if (raw.contains("NO DATA") ||
-            raw.contains("CAN ERROR") ||
-            raw.contains("BUS ERROR") ||
-            raw.contains("UNABLE TO CONNECT")
-        ) {
+        if (status != null) {
             val e = NoDataException("$cmd: ${raw.trim()}")
             CaptureLog.logThrowable("ELM", e)
             throw e

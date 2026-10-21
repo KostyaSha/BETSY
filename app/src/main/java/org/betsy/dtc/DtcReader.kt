@@ -7,6 +7,7 @@ import org.betsy.decode.InfLayout
 import org.betsy.decode.InfMeaning
 import org.betsy.detect.VehicleInfo
 import org.betsy.detect.VehicleModel
+import org.betsy.elm.AdapterStatus
 import org.betsy.elm.ElmException
 import org.betsy.elm.ElmSession
 import org.betsy.elm.NegativeResponse
@@ -377,17 +378,15 @@ class DtcReader(
         positive: (String) -> Boolean,
     ): EcuLiveness {
         val trimmed = raw.trim()
-        if (trimmed.contains('?') ||
-            trimmed.contains("STOPPED", ignoreCase = true) ||
-            trimmed.contains("UNABLE TO CONNECT", ignoreCase = true)
-        ) {
-            return EcuLiveness(header, false, "Adapter error: $trimmed")
-        }
-        if (trimmed.contains("NO DATA", ignoreCase = true) ||
-            trimmed.contains("CAN ERROR", ignoreCase = true) ||
-            trimmed.contains("BUS ERROR", ignoreCase = true)
-        ) {
-            return EcuLiveness(header, false, "No response (NO DATA)")
+        val status = AdapterStatus.find(raw)
+        if (status != null) {
+            val detail =
+                if (status in listOf("NO DATA", "CAN ERROR", "BUS ERROR")) {
+                    "No response (NO DATA)"
+                } else {
+                    "Adapter error: $trimmed"
+                }
+            return EcuLiveness(header, false, detail)
         }
         val norm = Normalize.normalize(raw)
         if (positive(norm)) {
@@ -429,6 +428,10 @@ class DtcReader(
                 try {
                     setCanResponseHeaders(true)
                     val raw = rawDiagnosticCommand(header, cmd, raws)
+                    AdapterStatus.find(raw)?.let {
+                        notes += "Generic DTCs ($cmd): adapter status $it: ${raw.trim()}"
+                        return@withEcu emptyList()
+                    }
                     val lines = rawLinesFromCanId(raw, "7EA")
                     val line = lines.firstOrNull()
                     if (line == null) {
@@ -568,6 +571,10 @@ class DtcReader(
                 return null
             }
         raws[rawKey(header, cmd)] = raw
+        AdapterStatus.find(raw)?.let {
+            notes += "$label: adapter status $it: ${raw.trim()}"
+            return null
+        }
         val response = Normalize.normalize(raw)
         NegativeResponse.parse(response)?.let {
             notes += "$label: $it"

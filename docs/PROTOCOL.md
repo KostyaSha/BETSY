@@ -91,8 +91,17 @@ lines (`0:`, `1:`, `2:` …). **The declared count is authoritative**, the adapt
 frame, so concatenating frames over-counts. Single-frame replies carry no count; stripping three
 characters unconditionally eats real payload. Both mistakes are silent.
 
-`NO DATA`, `ERROR`, `STOPPED`, `UNABLE TO CONNECT`, `BUFFER FULL` and `?` are status, not data.
-Strip them before hex extraction or `NO DATA` reduces to the plausible-looking `DAA`.
+`NO DATA`, `CAN ERROR`, `BUS ERROR`, `ERROR`, `STOPPED`, `UNABLE TO CONNECT`,
+`BUFFER FULL` and `?` are error status, not data. Classify them case-insensitively before
+hex extraction and reject the exchange, even when positive data precedes the error text.
+Do not strip an error and decode what remains: `NO DATA` reduces to plausible-looking
+`DAA`, and `STOPPED` contributes `ED`, which can supply a missing PID byte.
+
+The same status check applies to normalized session reads, raw generic DTCs, mode-02 freeze
+frames, and liveness. Preserve the entire raw response and an error note; a failed INF page
+does not increment the responded-page count. An error in a freeze-frame mask stops frame
+discovery, while an individual PID error leaves subsequent reads intact. This does not add
+retry, recovery, or a rule to scan ordinary hex payloads for embedded negative-response tags.
 
 ### 2.1 Indexing
 

@@ -360,6 +360,70 @@ class DtcReaderTest {
     }
 
     @Test
+    fun freezePidStatusTextCannotSupplyAMissingValueOrHideBehindValidData() {
+        for (status in listOf("STOPPED", "BUFFER FULL", "ERROR", "NO DATA", "CAN ERROR", "BUS ERROR", "UNABLE TO CONNECT", "?")) {
+            for (prefix in listOf("420500", "42050079")) {
+                val raw = "$prefix\r$status"
+                val t = FakeTransport(gen2Base(mapOf("020500" to raw)))
+                val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+                assertEquals(raw, result.rawResponses.getValue("7E2/020500"))
+                assertTrue(raw, result.notes.any { it.contains("020500 on 7E2") && it.contains(status) })
+                assertTrue(t.commands.contains("020C00"))
+                assertTrue(t.commands.contains("21CA"))
+            }
+        }
+    }
+
+    @Test
+    fun freezeMaskWithAdapterErrorCannotStartPidReads() {
+        val raw = "4200007E1F88\rNO DATA"
+        val t = FakeTransport(gen2Base(mapOf("020000" to raw)))
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertEquals(raw, result.rawResponses.getValue("7E2/020000"))
+        assertTrue(result.notes.any { it.contains("020000") && it.contains("NO DATA") })
+        assertFalse(t.commands.contains("020500"))
+        assertFalse(t.commands.contains("020001"))
+        assertTrue(t.commands.contains("21CA"))
+    }
+
+    @Test
+    fun genericDtcStatusTextIsNotHiddenByAPositiveFrame() {
+        for ((cmd, service) in listOf("03" to "43", "07" to "47")) {
+            for (status in listOf("STOPPED", "BUFFER FULL", "ERROR", "NO DATA", "?")) {
+                val raw = "7EA 04 $service 01 0A A6\r$status"
+                val result = awaitBlocking { reader(FakeTransport(gen2Base(mapOf(cmd to raw))), VehicleModel.GEN2).read() }
+                assertTrue(result.storedGenericDtcs.isEmpty())
+                assertTrue(result.pendingGenericDtcs.isEmpty())
+                assertTrue(result.notes.any { it.contains("Generic DTCs ($cmd)") && it.contains(status) })
+                assertEquals(raw, result.rawResponses.getValue("7E2/$cmd"))
+            }
+        }
+    }
+
+    @Test
+    fun stoppedOrOverflowedInfPagesAreNotCountedAsSuccessful() {
+        for (status in listOf("STOPPED", "BUFFER FULL", "ERROR", "stopped")) {
+            val raw = "61C7" + payload(29 to 0, 30 to 115) + "\r$status"
+            val result = awaitBlocking { reader(FakeTransport(gen2Base(mapOf("21C7" to raw))), VehicleModel.GEN2).read() }
+            assertTrue(result.infCodes.isEmpty())
+            assertEquals(4, result.infTablesResponded)
+            assertTrue(result.notes.any { it.contains("21C7") && it.contains(status) })
+            assertEquals(raw, result.rawResponses.getValue("7E2/21C7"))
+        }
+    }
+
+    @Test
+    fun livenessRejectsStatusTextAfterACompleteMask() {
+        for (status in listOf("BUFFER FULL", "ERROR", "buffer full")) {
+            val raw = "4100981A8013\r$status"
+            val result = awaitBlocking { reader(FakeTransport(gen2Base(mapOf("0100" to raw))), VehicleModel.GEN2).read() }
+            assertFalse(result.liveness!!.responding)
+            assertTrue(result.liveness!!.detail.contains(status))
+            assertEquals(raw, result.rawResponses.getValue("7E2/0100"))
+        }
+    }
+
+    @Test
     fun freezePidsRequireTheirCompleteValueAndRetainTruncatedRaw() {
         val widths =
             mapOf(
