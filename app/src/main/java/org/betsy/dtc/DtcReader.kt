@@ -397,8 +397,8 @@ class DtcReader(
      * **Single-frame only.** ATH1 puts the responder CAN ID on every line, and this takes the first
      * `7EA` line and strips 3 nibbles of ID + 2 of single-frame PCI. Past about three stored DTCs
      * the reply becomes multi-frame: the first frame's PCI is 4 nibbles, not 2, and the rest of the
-     * codes arrive on consecutive-frame lines this never reads. Such a reply is detected and
-     * reported as a note instead of being decoded, because a silently truncated DTC list reads as a
+     * codes arrive on consecutive-frame lines this never reads. Multi-frame replies and multiple
+     * matching responder lines are reported as a note instead of being decoded, because a silently truncated DTC list reads as a
      * cleaner car than the one in front of you.
      *
      * TODO: reassemble ISO-TP under ATH1 (or read with ATH0 and take the assembled reply, losing
@@ -417,7 +417,8 @@ class DtcReader(
                 session.rawCommand("ATH1")
                 try {
                     val raw = rawDiagnosticCommand(header, cmd, raws)
-                    val line = rawLineFromCanId(raw, "7EA")
+                    val lines = rawLinesFromCanId(raw, "7EA")
+                    val line = lines.firstOrNull()
                     if (line == null) {
                         notes += "Generic DTCs ($cmd): no 7EA response line found"
                         return@withEcu emptyList()
@@ -439,6 +440,12 @@ class DtcReader(
                     val pci = Normalize.u8(norm, 3)
                     if (pci !in 1..7) {
                         notes += "Generic DTCs ($cmd): invalid single-frame PCI 0x${"%02X".format(pci)}"
+                        return@withEcu emptyList()
+                    }
+                    if (lines.size != 1) {
+                        notes +=
+                            "Generic DTCs ($cmd): multiple 7EA response lines, not decoded " +
+                            "(raw kept; a single-frame result would omit other responses)"
                         return@withEcu emptyList()
                     }
                     val end = 5 + pci * 2
@@ -586,14 +593,14 @@ class DtcReader(
     }
 
     /** Match the responder at the start of an ATH1 line, never inside another ECU's payload. */
-    private fun rawLineFromCanId(
+    private fun rawLinesFromCanId(
         raw: String,
         canId: String,
-    ): String? =
+    ): List<String> =
         raw
             .split('\r', '\n')
             .map { it.trim() }
-            .firstOrNull { Normalize.normalize(it).startsWith(canId) }
+            .filter { Normalize.normalize(it).startsWith(canId) }
 
     /**
      * §7.1 engine path. Physical ECM `7E0` (never functional `7DF`, §1.2).

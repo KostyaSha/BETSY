@@ -446,6 +446,24 @@ class DtcReaderTest {
     }
 
     @Test
+    fun genericDtcReadsDoNotSilentlyDiscardAdditionalResponderLines() {
+        for ((cmd, service) in listOf("03" to "43", "07" to "47")) {
+            val first = "7EA 04 $service 01 0A A6"
+            for (second in listOf("7EA 04 $service 01 30 00", first, "7EA 03 7F $cmd 11", "7EA 21 00 00")) {
+                val raw = "$first\r7E8 02 43 00\r$second"
+                val t = FakeTransport(gen2Base(mapOf(cmd to raw)))
+                val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+                assertTrue(result.storedGenericDtcs.isEmpty())
+                assertTrue(result.pendingGenericDtcs.isEmpty())
+                assertTrue(result.notes.any { it.contains("Generic DTCs ($cmd)") && it.contains("multiple 7EA") })
+                assertEquals(raw, result.rawResponses.getValue("7E2/$cmd"))
+                assertTrue(t.commands.contains("21CA"))
+                assertTrue(t.commands.count { it == "ATH0" } >= 2)
+            }
+        }
+    }
+
+    @Test
     fun generic07UsesTheSameSingleFrameBounds() {
         val raw = "7EA 02 47 01 0A A6 00 00 00"
         val result = awaitBlocking { reader(FakeTransport(gen2Base(mapOf("07" to raw))), VehicleModel.GEN2).read() }

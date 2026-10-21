@@ -581,6 +581,14 @@ subsequent INF reads continue. A refusal is evidence that the request was declin
 that the ECU contains no recorded faults.
 
 
+Generic `$03`/`$07` parsing with ATH1 requires exactly one matching `7EA` single-frame
+line. If additional `7EA` lines arrive, the reader retains the entire raw exchange and reports
+that multiple responses were not decoded; it must not silently present the first line as the
+complete result. Repeated identical frames, a trailing refusal, and an orphan consecutive
+frame are also ambiguous and are not silently discarded. Lines from other CAN IDs do not count
+as additional `7EA` responses. ISO-TP multi-frame reassembly and collection of multiple
+application responses remain unimplemented; this guard does not add either capability.
+
 ### 7.5 Clearing
 
 Not implemented in this build. The wire command itself would be straightforward to add, but clearing is deliberately omitted for now. Everything in this build is a read: nothing clears a code, runs an actuator test, or writes to an ECU.
