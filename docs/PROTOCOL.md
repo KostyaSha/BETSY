@@ -74,6 +74,15 @@ On Gen2 the **battery** ECU is `7E3`, not `7E2`, this is stated backwards in a l
 circulating material. Use physical addressing throughout; never send any of this to the
 functional address `7DF`.
 
+For setup commands and `ATSH`, require one standalone `OK` response line (case-insensitive),
+allowing surrounding whitespace and an optional leading echo of that same command. Reject
+substring matches such as `NOT OK` or `OKAY`, unexpected extra lines, and adapter error text even
+when an `OK` line is also present. Keep the existing one retry; if neither reply confirms the
+command, stop setup or skip the addressed ECU block and report the failure. The final raw reply
+remains available in the session and failure message. The ATZ banner check is unchanged.
+This is client-side acknowledgement validation, covered by synthetic tests; no new on-car
+verification or change to ECU requests is implied.
+
 **`ATSH` is adapter-global state.** The header and the request that follows must be one atomic
 critical section. A background poller that can set its own header between another task's `ATSH`
 and its request will eventually do so, and the request then goes to the wrong ECU and returns

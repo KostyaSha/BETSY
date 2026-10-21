@@ -147,7 +147,20 @@ class ElmSession(
     ) {
         repeat(2) {
             // §1.1: retry once, then abort and report the failing command
-            if (rawCommand(cmd).contains(token)) return
+            val raw = rawCommand(cmd)
+            val accepted =
+                if (token == "OK") {
+                    val lines =
+                        raw
+                            .split('\r', '\n')
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                            .let { if (it.firstOrNull()?.equals(cmd, ignoreCase = true) == true) it.drop(1) else it }
+                    AdapterStatus.find(raw) == null && lines.size == 1 && lines.single().equals("OK", ignoreCase = true)
+                } else {
+                    raw.contains(token)
+                }
+            if (accepted) return
         }
         throw ElmException("ELM327 setup failed at $cmd (last response: ${lastRawResponse.trim()})")
     }

@@ -98,6 +98,20 @@ class DtcReaderTest {
     }
 
     @Test
+    fun unconfirmedHeaderCannotCreateAConfirmedEmptyDtcResult() {
+        for (header in listOf("7E2", "7E3", "7E0")) {
+            for (raw in listOf("NOT OK", "CAN ERROR\rOK")) {
+                val t = FakeTransport(gen2Base(mapOf("ATSH$header" to raw)))
+                val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+                assertFalse("$header: $raw", result.enhancedDtcReadsComplete)
+                assertTrue(result.notes.any { it.contains("DTC read on $header") && it.contains(raw.trim()) })
+                assertFalse(result.rawResponses.containsKey("$header/${if (header == "7E3") "1380" else "13B0"}"))
+                assertTrue(result.notes.any { it.contains("Toyota enhanced DTC read incomplete") })
+            }
+        }
+    }
+
+    @Test
     fun enhancedDtcCompletenessIncludesHeaderAndTransportFailures() {
         for (cmd in listOf("ATSH7E2", "ATSH7E3", "ATSH7E0", "13B0", "1380")) {
             val t = FakeTransport(gen2Base(), throwOn = mapOf(cmd to TransportException("timeout")))
