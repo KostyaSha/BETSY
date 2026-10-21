@@ -5,27 +5,14 @@ import org.betsy.elm.Normalize
 import org.betsy.model.InfDetail
 
 /**
- * PROTOCOL.md §7.4.2, reading the INF sub-code out of a freeze page.
+ * PROTOCOL.md §7.4.2: read the unsigned detail value from a supported Gen2 compact freeze page.
  *
- * `21C6`..`21CA` on `7E2` are **per-DTC freeze pages**, not flag tables. When the ECU stores a DTC
- * it writes one page, and the page carries the sub-code as a `u16` big-endian at **bytes 29-30**
- * of the payload, alongside a frame of analog snapshot values.
+ * `21C6`..`21CA` on `7E2` carry snapshot data, not tables of active INF flags. In the captured
+ * 48-byte layout, payload bytes 29-30 contain the big-endian detail value; a recorded P0571 page
+ * carries 0x0073 (115). A nonzero value is evidence, not proof of ownership by a particular DTC.
  *
- * So decoding is a field read, not a search:
- *
- * ```
- * page not all zero  ->  sub-code = u16BE(payload[29], payload[30])
- * ```
- *
- * Measured on a 2009 Gen2 with `P0571` stored: bytes 29-30 read `0x0073`, decimal 115, which is
- * that code's documented sub-code. All 48 bytes remained identical across an ignition cycle, so a
- * page is a snapshot written when the fault sets rather than live data.
- *
- * **Why there is no bit map here.** An earlier model treated each page as a table of flags and
- * called a slot active when non-zero. On a car whose only fault was a brake switch that reported
- * **35 simultaneous sub-codes**: those bytes are analog readings in offset binary, which is why a
- * car at rest shows a run of `0x80` midpoints. `InfLayout` still describes those 62 analog items
- * for naming and scaling, but it plays no part in reading the sub-code.
+ * Other snapshot values are retained as raw data. They are not decoded by InfLayout, whose legacy
+ * field lists are empty, and must not be treated as a uniform set of offset-binary analog items.
  */
 object InfDecoder {
     /** Byte offset of the sub-code field within a page payload; 16 bits, big-endian. */

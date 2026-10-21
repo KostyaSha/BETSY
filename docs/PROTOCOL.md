@@ -520,8 +520,17 @@ response `52`, a high-bit presence flag and a 15-bit identifier. Its presence ma
 applied to the 16-bit Information field inside a `61 C6`–`61 CA` snapshot.
 
 **A page is a stored snapshot, not live data.** The 48 bytes remained identical across an ignition
-cycle. Live values would have drifted. The remaining bytes are analog readings, offset-binary,
-which is why a car at rest shows `80 80 80 80`: those are midpoints, not flags.
+cycle. Live values would have drifted. Some numeric fields use midpoint encoding, but the
+remaining data must not be treated as a uniform array of offset-binary analog values or INF
+flags. Shared page definitions also contain enums, individual flags, counters, and optional
+fields for other vehicle layouts.
+
+BETSY currently decodes only the Information value from these pages. InfLayout's legacy field
+lists are empty; it does not provide names, formulas, or units for additional snapshot values.
+Decoding those values requires the selected ECU's byte-support mapping and effective field
+metadata. Shared definitions extend through bit 455 of an expanded buffer, whereas the recorded
+compact page has 48 payload bytes; expanded offsets are not direct wire offsets. A shared field
+name, including rear-motor entries, is not evidence that NHW20 supports it.
 
 **Three things this rules out**, all measured:
 
