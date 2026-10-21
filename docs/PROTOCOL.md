@@ -690,3 +690,20 @@ still means stored DTCs were found, not that absence of faults was confirmed. A 
 scan is described only as no stored DTCs from the completed enhanced reads, not a full-vehicle
 health check. These are client/export status rules, tested locally with synthetic scans and
 mocked uploads; no new ECU requests or on-car verification.
+
+### INF page completion in shared captures
+
+Export `infTablesResponded` separately from decoded INF values. Despite its historical name,
+it counts C6-CA pages successfully decoded in the supported compact layout, including pages
+with zero Information; transport replies that fail parsing do not increment it. This is
+independent of enhanced DTC completion. The worker accepts integers 0-5, records the count,
+and marks fewer than five decoded pages as incomplete. Older captures without the count
+remain accepted with page completion unknown; absence is not interpreted as five successes.
+
+An empty `codes` list alone establishes only that no INF value was decoded. It must not be
+described as proof no page carried an INF, a decoder defect, or a one-to-one DTC/page relation.
+With five successfully decoded pages and no decoded values, the narrower conclusion is that
+those five compact pages contained no nonzero Information value. Retain partial decoded INF,
+raw replies, and notes. The legacy `decoder_miss` metadata remains an advisory indication of
+stored DTCs with no decoded INF, not proof of a bug; the capture title now says `no INF decoded`.
+This is capture-status handling tested locally, with no new ECU requests or on-car verification.

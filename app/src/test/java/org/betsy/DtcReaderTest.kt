@@ -165,6 +165,26 @@ class DtcReaderTest {
     }
 
     @Test
+    fun captureExportsSuccessfullyDecodedInfPageCountIndependentlyOfValues() {
+        for (failed in listOf(0, 1, 5)) {
+            for (withValue in listOf(false, true)) {
+                val replies = mutableMapOf("13B0" to "53010AA6")
+                if (withValue) replies["21C6"] = "61C6" + payload(29 to 2, 30 to 0x64)
+                for (cmd in listOf("21CA", "21C9", "21C8", "21C7", "21C6").take(failed)) replies[cmd] = "NO DATA"
+                val result = awaitBlocking { reader(FakeTransport(gen2Base(replies)), VehicleModel.GEN2).read() }
+                val capture = CaptureData.from(result, vehicleInfo(VehicleModel.GEN2), "test", "test", "test")
+                val json = JSONObject(capture.toJson())
+                assertEquals(5 - failed, json.getInt("infTablesResponded"))
+                assertEquals(if (withValue && failed < 5) 1 else 0, json.getJSONArray("codes").length())
+                assertTrue(json.getBoolean("hasStoredDtcs"))
+                assertTrue(json.getBoolean("enhancedDtcReadsComplete"))
+                assertEquals(result.rawResponses, capture.raw)
+                assertEquals(result.notes, capture.notes)
+            }
+        }
+    }
+
+    @Test
     fun enhancedDtcCompletenessRequiresEveryGen2EcuToDecode() {
         for (key in listOf("7E2/13B0", "7E3/1380", "7E0/13B0")) {
             for (raw in listOf("7F1312", "NO DATA", "53010A", "62005300")) {

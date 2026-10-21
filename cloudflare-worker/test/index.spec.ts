@@ -183,6 +183,56 @@ describe("enhanced DTC read completeness", () => {
 	});
 });
 
+describe("INF page completion", () => {
+	it("does not infer absent INF values from failed page reads", async () => {
+		expectGithubPut();
+		const res = await post(payload({ hasStoredDtcs: true, infTablesResponded: 2, notes: ["INF 21C7 on 7E2: NO DATA"] }));
+		expect(res.status).toBe(200);
+		expect(committed!.content).toContain("inf_tables_responded: 2");
+		expect(committed!.content).toContain("INF pages decoded: 2/5");
+		expect(committed!.content).toContain("INF page read incomplete");
+		expect(committed!.content).toContain("INF 21C7 on 7E2: NO DATA");
+		expect(committed!.content).not.toContain("no freeze page carried a sub-code");
+		expect(committed!.message).toContain("no INF decoded");
+	});
+
+	it("retains decoded INF while warning about missing pages", async () => {
+		expectGithubPut();
+		const res = await post(payload({ hasStoredDtcs: true, infTablesResponded: 4, codes: [{ table: "Detail Code 1", code: 612 }] }));
+		expect(res.status).toBe(200);
+		expect(committed!.content).toContain("INF page read incomplete");
+		expect(committed!.content).toContain("Detail Code 1: 612");
+		expect(committed!.content).toContain("decoder_miss: false");
+	});
+
+	it("does not assume that old captures decoded every INF page", async () => {
+		expectGithubPut();
+		const res = await post(payload({ hasStoredDtcs: true }));
+		expect(res.status).toBe(200);
+		expect(committed!.content).toContain("inf_tables_responded: null");
+		expect(committed!.content).toContain("INF page completion unknown");
+		expect(committed!.content).not.toContain("no freeze page carried a sub-code");
+	});
+
+	it("describes five decoded zero-value pages without inferring snapshot ownership", async () => {
+		expectGithubPut();
+		const res = await post(payload({ hasStoredDtcs: true, infTablesResponded: 5 }));
+		expect(res.status).toBe(200);
+		expect(committed!.content).toContain("INF pages decoded: 5/5");
+		expect(committed!.content).toContain("none contained a nonzero Information value");
+		expect(committed!.content).not.toContain("a page is written per DTC");
+		expect(committed!.content).not.toContain("INF page read incomplete");
+	});
+
+	it("rejects invalid INF page counts", async () => {
+		for (const value of [-1, 6, 1.5, "5", null]) {
+			const res = await post(payload({ infTablesResponded: value }));
+			expect(res.status).toBe(400);
+			expect(committed).toBeNull();
+		}
+	});
+});
+
 describe("routing", () => {
 	// Origin decides the directory. A healthy real car is still a real capture; filing it
 	// beside a curl probe tells a contributor their scan did not count.
@@ -232,7 +282,7 @@ describe("routing", () => {
 		expect(res.status).toBe(200);
 		expect(lastPath).toContain("/contents/captures/real/");
 		expect(committed!.content).toContain("decoder_miss: true");
-		expect(committed!.message).toContain("decoder miss");
+		expect(committed!.message).toContain("no INF decoded");
 	});
 
 	it("never lets codes decide the directory", async () => {

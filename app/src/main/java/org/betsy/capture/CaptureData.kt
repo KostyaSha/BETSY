@@ -75,6 +75,8 @@ data class CaptureData(
     val demo: Boolean = false,
     /** All planned enhanced DTC reads completed; finding no codes alone does not establish this. */
     val enhancedDtcReadsComplete: Boolean = false,
+    /** Successfully decoded compact INF pages, including pages whose Information value is zero. */
+    val infTablesResponded: Int = 0,
 ) {
     /**
      * Serialize for upload.
@@ -105,6 +107,7 @@ data class CaptureData(
             ).put("logTail", JSONArray(Redact.vin(logTail)))
             .put("hasStoredDtcs", hasStoredDtcs)
             .put("enhancedDtcReadsComplete", enhancedDtcReadsComplete)
+            .put("infTablesResponded", infTablesResponded)
             .put("ownerNotes", ownerNotes)
             // Always false: anything the app sends came off a car. The flag exists so test
             // harnesses can mark their own submissions, which keeps a healthy real car filed as
@@ -160,6 +163,7 @@ data class CaptureData(
                     ),
                 hasStoredDtcs = result.hasStoredDtcs,
                 enhancedDtcReadsComplete = result.enhancedDtcReadsComplete,
+                infTablesResponded = result.infTablesResponded,
                 ownerNotes = ownerNotes,
             )
     }
