@@ -553,6 +553,34 @@ class DtcReaderTest {
     }
 
     @Test
+    fun enhancedDtcFailuresKeepTheirOwnVerbatimRepliesForEveryGen2Ecu() {
+        for (key in listOf("7E2/13B0", "7E3/1380", "7E0/13B0")) {
+            for (raw in listOf("\r7F 13 12\r", "NO DATA\r", "CAN ERROR\r", "BUS ERROR\r", "UNABLE TO CONNECT\r", "?\r")) {
+                val t = FakeTransport(gen2Base(), byHeader = mapOf(key to raw))
+                val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+                assertEquals(key, raw, result.rawResponses.getValue(key))
+                assertTrue(result.groups.isEmpty())
+                assertTrue(result.notes.any { it.contains(key.substringBefore('/')) && it.contains(key.substringAfter('/')) })
+                assertTrue(t.commands.contains("21CA"))
+            }
+        }
+    }
+
+    @Test
+    fun enhancedDtcTimeoutDoesNotReuseThePreviousEcusReply() {
+        val t =
+            FakeTransport(
+                gen2Base(mapOf("13B0" to "53010AA6")),
+                throwOn = mapOf("1380" to TransportException("battery DTC timeout")),
+            )
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertEquals("53010AA6", result.rawResponses.getValue("7E2/13B0"))
+        assertFalse(result.rawResponses.containsKey("7E3/1380"))
+        assertTrue(result.notes.any { it.contains("1380") && it.contains("battery DTC timeout") })
+        assertTrue(t.commands.contains("21CA"))
+    }
+
+    @Test
     fun infTimeoutsDoNotCopyHeaderOrPreviousPageReplies() {
         val valid = "61C7" + payload(29 to 0, 30 to 115)
         val t =

@@ -325,6 +325,12 @@ substitute for Toyota enhanced DTCs or INF freeze pages.
 *Measured:* `13B0` and `1380` both answer `5300` on a healthy car's hybrid/battery ECUs. Masks
 `1381` and `1382` are refused with `7F1312`.
 
+Failed enhanced DTC reads retain their own verbatim ECU refusal or adapter-error output
+under the ECU/request raw key, alongside the error note. A timeout with no received bytes
+must not copy the preceding ECU's reply or an ATSH acknowledgement into that key. Failed
+responses remain errors and are not decoded as an empty successful DTC list. Partial
+transport replies remain incomplete evidence, even when their bytes look like a valid list.
+
 Service `0A` is generic OBD-II permanent-DTC storage and is unrelated to Toyota INF detail codes.
 
 **Engine path (*inferred*; confirm on-car).** Physical ECM header `7E0`,

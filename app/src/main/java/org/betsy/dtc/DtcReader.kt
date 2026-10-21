@@ -659,6 +659,11 @@ class DtcReader(
                                 parse(raw)
                             } catch (e: Exception) {
                                 retainPartialReply(e, header, cmd, raws)
+                                // The session clears this before each exchange, so refusals and
+                                // adapter errors retain their own bytes, never the previous reply.
+                                session.lastRawResponse.takeIf { it.isNotBlank() }?.let {
+                                    raws.putIfAbsent(rawKey(header, cmd), it)
+                                }
                                 notes += "${read.label} $cmd: ${e.message ?: e.toString()}"
                                 emptyList()
                             }
