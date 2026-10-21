@@ -59,7 +59,10 @@ object DtcDecoder {
         r: String,
         tag: String,
     ): String {
-        if (r.startsWith(tag)) return r
+        if (r.startsWith(tag)) {
+            Normalize.requireWholeBytes(r, tag)
+            return r
+        }
         if (!r.startsWith(tag, 3)) throw NoDataException("$tag: unexpected response service")
         val declared = r.take(3).toIntOrNull(16)
         if (declared == null || declared < 2) throw NoDataException("$tag: invalid response length prefix")

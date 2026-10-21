@@ -389,6 +389,7 @@ class DtcReader(
             return EcuLiveness(header, false, detail)
         }
         val norm = Normalize.normalize(raw)
+        if (norm.length % 2 != 0) return EcuLiveness(header, false, "Unexpected response: $trimmed")
         if (positive(norm)) {
             return EcuLiveness(header, true, "Responding")
         }
@@ -444,6 +445,7 @@ class DtcReader(
                         notes += "Generic DTCs ($cmd): 7EA line too short"
                         return@withEcu emptyList()
                     }
+                    Normalize.requireWholeBytes(norm.drop(3), "7EA CAN frame")
                     // ISO-TP PCI type is the nibble after the CAN ID: 0 = single frame, 1 = first
                     // frame of a multi-frame reply. Only the single-frame form is assembled here.
                     if (norm.getOrNull(3) == '1') {
@@ -583,6 +585,10 @@ class DtcReader(
         val expected = "42${cmd.drop(2)}"
         if (!response.startsWith(expected)) {
             notes += "$label: unexpected response (expected $expected): ${raw.trim()}"
+            return null
+        }
+        if (response.length % 2 != 0) {
+            notes += "$label: incomplete hex byte"
             return null
         }
         val pid = cmd.substring(2, 4)

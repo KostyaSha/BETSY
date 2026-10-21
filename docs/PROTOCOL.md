@@ -103,6 +103,13 @@ does not increment the responded-page count. An error in a freeze-frame mask sto
 discovery, while an individual PID error leaves subsequent reads intact. This does not add
 retry, recovery, or a rule to scan ordinary hex payloads for embedded negative-response tags.
 
+A normalized unprefixed byte response must contain pairs of hex digits. A dangling nibble
+is an incomplete byte, even after otherwise readable data; reject it before updating values.
+For length-prefixed messages, the three ELM length digits are metadata and are not subject to
+this byte-pair check; the bounded application data is. For ATH1, remove the three-digit CAN ID
+before checking the PCI/data byte sequence. Existing declared-boundary padding handling remains
+unchanged. Preserve malformed raw evidence and report the failed read.
+
 ### 2.1 Indexing
 
 `u8(k)`, `u16(k)` and `bytes(k, n)` are indexed in **hex characters**, not bytes, so offsets read

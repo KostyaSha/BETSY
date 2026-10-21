@@ -424,6 +424,44 @@ class DtcReaderTest {
     }
 
     @Test
+    fun freezePidWithDanglingNibbleKeepsRawAndReportsFailure() {
+        val raw = "42050079F"
+        val t = FakeTransport(gen2Base(mapOf("020500" to raw)))
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertEquals(raw, result.rawResponses.getValue("7E2/020500"))
+        assertTrue(result.notes.any { it.contains("020500") && it.contains("incomplete hex byte") })
+        assertTrue(t.commands.contains("020C00"))
+        assertTrue(t.commands.contains("21CA"))
+    }
+
+    @Test
+    fun freezeMaskWithDanglingNibbleStopsDiscovery() {
+        val raw = "4200007E1F8803F"
+        val t = FakeTransport(gen2Base(mapOf("020000" to raw)))
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertEquals(raw, result.rawResponses.getValue("7E2/020000"))
+        assertTrue(result.notes.any { it.contains("020000") && it.contains("incomplete hex byte") })
+        assertFalse(t.commands.contains("020500"))
+        assertTrue(t.commands.contains("21CA"))
+    }
+
+    @Test
+    fun genericFramesAndLivenessCannotIgnoreDanglingHexDigits() {
+        for ((cmd, raw) in listOf("03" to "7EA0443010AA6F", "07" to "7EA024700F")) {
+            val result = awaitBlocking { reader(FakeTransport(gen2Base(mapOf(cmd to raw))), VehicleModel.GEN2).read() }
+            assertEquals(raw, result.rawResponses.getValue("7E2/$cmd"))
+            assertTrue(result.storedGenericDtcs.isEmpty())
+            assertTrue(result.pendingGenericDtcs.isEmpty())
+            assertTrue(result.notes.any { it.contains("Generic DTCs ($cmd)") && it.contains("incomplete hex byte") })
+        }
+        for (raw in listOf("4100981A8013F", "7F0111F")) {
+            val result = awaitBlocking { reader(FakeTransport(gen2Base(mapOf("0100" to raw))), VehicleModel.GEN2).read() }
+            assertFalse(result.liveness!!.responding)
+            assertEquals(raw, result.rawResponses.getValue("7E2/0100"))
+        }
+    }
+
+    @Test
     fun freezePidsRequireTheirCompleteValueAndRetainTruncatedRaw() {
         val widths =
             mapOf(

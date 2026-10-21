@@ -33,7 +33,10 @@ object SpeedRpmDecoder {
 
     /** Bound an assembled response before interpreting either value. */
     private fun message(r: String): String {
-        if (r.startsWith("410C")) return r
+        if (r.startsWith("410C")) {
+            Normalize.requireWholeBytes(r, "010C0D")
+            return r
+        }
         if (!r.startsWith("410C", 3)) throw NoDataException("010C0D: unexpected response service or PID")
         val declared = r.take(3).toIntOrNull(16)
         if (declared == null || declared < 4) throw NoDataException("010C0D: invalid response length prefix")

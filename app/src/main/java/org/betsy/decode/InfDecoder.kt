@@ -34,6 +34,7 @@ object InfDecoder {
         table: InfTable,
     ): List<InfDetail> {
         val i = Normalize.requireTag(r, table.tag)
+        if (i == 0) Normalize.requireWholeBytes(r, table.request)
         val payloadStart = i + 4
         var bytes = (r.length - payloadStart) / 2
 
