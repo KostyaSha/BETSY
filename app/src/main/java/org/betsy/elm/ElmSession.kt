@@ -27,6 +27,9 @@ class ElmSession(
      * [withEcu] can hold it across nested exchanges (§1.2, §6). */
     private val lock = ReentrantLock()
 
+    /** Session setup remains required; an attempted format change invalidates headerless reads. */
+    private var headersRequireConfirmation = false
+
     /** Inter-command timeout, §6: 2500 ms for Gen2–Gen4.5, 8000 ms for Gen1 and Tahoe. */
     var commandTimeoutMs: Int = 2500
 
@@ -89,7 +92,7 @@ class ElmSession(
 
     /** Issues an OBD request and returns the §2-normalized response R. */
     suspend fun command(cmd: String): String {
-        val raw = rawCommand(cmd)
+        val raw = headerlessRawCommand(cmd)
         val status = AdapterStatus.find(raw)
         if (status == "?") {
             val e = ElmException("adapter rejected command '$cmd'")
@@ -113,20 +116,46 @@ class ElmSession(
         return r
     }
 
+    /** Read bytes for a headerless parser only while the response format is confirmed. */
+    suspend fun headerlessRawCommand(cmd: String): String {
+        lock.lock()
+        try {
+            if (headersRequireConfirmation) {
+                lastRawResponse = ""
+                val error = ElmException("$cmd: headerless response format unconfirmed; confirm ATH0 before continuing")
+                CaptureLog.logThrowable("ELM", error)
+                throw error
+            }
+            return rawCommand(cmd)
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    /** One format-control exchange; callers retain the existing retry and cleanup policy. */
+    suspend fun setResponseHeaders(enabled: Boolean) {
+        val cmd = if (enabled) "ATH1" else "ATH0"
+        val raw = rawCommand(cmd)
+        if (!acknowledges(raw, cmd)) throw ElmException("$cmd: expected OK (response: ${raw.trim()})")
+    }
+
     /**
      * Sends [cmd] and returns the adapter's verbatim output with no normalization, no error
-     * classification, and no negative-response detection. Used by the Gen2 7E2 liveness probe and
-     * ATH1 generic OBD reads so the caller can classify every outcome (including timeout / NO DATA
-     * / 7F / unexpected hex) without throwing.
+     * classification, and no negative-response detection. Used for AT controls and generic DTC
+     * reads whose parser explicitly handles CAN headers. Headerless parsers use
+     * [headerlessRawCommand] so an unconfirmed format change cannot supply their input.
      */
     suspend fun rawCommand(cmd: String): String {
         lock.lock()
         try {
             lastRawResponse = ""
+            val control = cmd.trim().uppercase()
+            if (control in listOf("ATH1", "ATH0", "ATZ")) headersRequireConfirmation = true
             transport.readTimeoutMs = commandTimeoutMs
             CaptureLog.log("ELM", ">> $cmd")
             val raw = transport.send(cmd)
             lastRawResponse = raw
+            if (control == "ATH0" && acknowledges(raw, cmd)) headersRequireConfirmation = false
             CaptureLog.log("ELM", "<< ${raw.trim()}")
             return raw
         } catch (e: Exception) {
@@ -150,19 +179,26 @@ class ElmSession(
             val raw = rawCommand(cmd)
             val accepted =
                 if (token == "OK") {
-                    val lines =
-                        raw
-                            .split('\r', '\n')
-                            .map { it.trim() }
-                            .filter { it.isNotEmpty() }
-                            .let { if (it.firstOrNull()?.equals(cmd, ignoreCase = true) == true) it.drop(1) else it }
-                    AdapterStatus.find(raw) == null && lines.size == 1 && lines.single().equals("OK", ignoreCase = true)
+                    acknowledges(raw, cmd)
                 } else {
                     raw.contains(token)
                 }
             if (accepted) return
         }
         throw ElmException("ELM327 setup failed at $cmd (last response: ${lastRawResponse.trim()})")
+    }
+
+    private fun acknowledges(
+        raw: String,
+        cmd: String,
+    ): Boolean {
+        val lines =
+            raw
+                .split('\r', '\n')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .let { if (it.firstOrNull()?.equals(cmd, ignoreCase = true) == true) it.drop(1) else it }
+        return AdapterStatus.find(raw) == null && lines.size == 1 && lines.single().equals("OK", ignoreCase = true)
     }
 
     companion object {

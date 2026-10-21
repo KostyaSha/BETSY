@@ -8,7 +8,6 @@ import org.betsy.decode.InfMeaning
 import org.betsy.detect.VehicleInfo
 import org.betsy.detect.VehicleModel
 import org.betsy.elm.AdapterStatus
-import org.betsy.elm.ElmException
 import org.betsy.elm.ElmSession
 import org.betsy.elm.NegativeResponse
 import org.betsy.elm.NegativeResponseException
@@ -364,6 +363,8 @@ class DtcReader(
                     msg.contains("timed out", ignoreCase = true)
                 ) {
                     "No response (timeout)"
+                } else if (msg.contains("ATH0")) {
+                    "Response format unconfirmed: $msg"
                 } else if (msg.contains("Header") || msg.contains("ATSH") || msg.contains("setup failed")) {
                     "Header setup failed: $msg"
                 } else {
@@ -427,8 +428,8 @@ class DtcReader(
             session.withEcu(header) {
                 stage(SweepPhase.GENERIC_OBD, "Generic DTCs (\$$cmd)")
                 try {
-                    setCanResponseHeaders(true)
-                    val raw = rawDiagnosticCommand(header, cmd, raws)
+                    session.setResponseHeaders(true)
+                    val raw = rawDiagnosticCommand(header, cmd, raws, canHeaders = true)
                     AdapterStatus.find(raw)?.let {
                         notes += "Generic DTCs ($cmd): adapter status $it: ${raw.trim()}"
                         return@withEcu emptyList()
@@ -489,7 +490,7 @@ class DtcReader(
                     }
                 } finally {
                     try {
-                        setCanResponseHeaders(false)
+                        session.setResponseHeaders(false)
                     } catch (e: Exception) {
                         notes += "Generic DTCs ($cmd) restoring ATH0: ${e.message ?: e.toString()}"
                     }
@@ -498,15 +499,6 @@ class DtcReader(
         } catch (e: Exception) {
             notes += "Generic DTCs ($cmd): ${e.message ?: e.toString()}"
             emptyList()
-        }
-    }
-
-    /** One AT exchange; an unconfirmed format change is a session error, not ECU data. */
-    private suspend fun setCanResponseHeaders(enabled: Boolean) {
-        val cmd = if (enabled) "ATH1" else "ATH0"
-        val raw = session.rawCommand(cmd)
-        if (!raw.trim().equals("OK", ignoreCase = true)) {
-            throw ElmException("$cmd: expected OK (response: ${raw.trim()})")
         }
     }
 
@@ -606,9 +598,11 @@ class DtcReader(
         header: String,
         cmd: String,
         raws: MutableMap<String, String>,
+        canHeaders: Boolean = false,
     ): String =
         try {
-            session.rawCommand(cmd).also { raws[rawKey(header, cmd)] = it }
+            val raw = if (canHeaders) session.rawCommand(cmd) else session.headerlessRawCommand(cmd)
+            raw.also { raws[rawKey(header, cmd)] = it }
         } catch (e: Exception) {
             retainPartialReply(e, header, cmd, raws)
             throw e

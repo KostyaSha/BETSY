@@ -26,6 +26,72 @@ class ElmSessionTest {
     }
 
     @Test
+    fun unconfirmedAth0PreventsHeaderlessRequestsFromReachingTheTransport() {
+        for (reply in listOf("?", "NO DATA", "NOT OK", "", "OK\rCAN ERROR")) {
+            val transport =
+                Replies { cmd, _ ->
+                    if (cmd == "ATH0") {
+                        reply
+                    } else if (cmd.startsWith("AT")) {
+                        "OK"
+                    } else {
+                        "5300"
+                    }
+                }
+            val session = ElmSession(transport)
+            awaitBlocking { session.rawCommand("ATH1") }
+            awaitBlocking { session.rawCommand("ATH0") }
+            val error = assertThrows(ElmException::class.java) { awaitBlocking { session.command("13B0") } }
+            assertTrue(error.message!!.contains("ATH0"))
+            assertFalse(transport.commands.contains("13B0"))
+            assertEquals("", session.lastRawResponse)
+        }
+    }
+
+    @Test
+    fun rejectedOrInterruptedHeaderEnableStillRequiresConfirmedHeaderlessFormat() {
+        for (failWithException in listOf(false, true)) {
+            val transport =
+                Replies { cmd, _ ->
+                    if (cmd == "ATH1") {
+                        if (failWithException) throw org.betsy.transport.TransportException("enable timeout")
+                        "?"
+                    } else {
+                        "5300"
+                    }
+                }
+            val session = ElmSession(transport)
+            try {
+                awaitBlocking { session.rawCommand("ATH1") }
+            } catch (_: org.betsy.transport.TransportException) {
+                // A failed exchange leaves the adapter state unconfirmed.
+            }
+            assertThrows(ElmException::class.java) { awaitBlocking { session.command("21C6") } }
+            assertFalse(transport.commands.contains("21C6"))
+        }
+    }
+
+    @Test
+    fun aConfirmedAth0AllowsHeaderlessReadsAgain() {
+        val transport =
+            Replies { cmd, _ ->
+                if (cmd == "ATH0") {
+                    "ath0\r ok\r"
+                } else if (cmd.startsWith("AT")) {
+                    "OK"
+                } else {
+                    "5300"
+                }
+            }
+        val session = ElmSession(transport)
+        awaitBlocking { session.rawCommand("ATH1") }
+        assertThrows(ElmException::class.java) { awaitBlocking { session.command("13B0") } }
+        awaitBlocking { session.rawCommand("ATH0") }
+        assertEquals("5300", awaitBlocking { session.command("13B0") })
+        assertEquals(1, transport.commands.count { it == "13B0" })
+    }
+
+    @Test
     fun headerRequiresAnUnambiguousOkBeforeRunningTheEcuBlock() {
         for (header in listOf("7E0", "7E2", "7E3")) {
             for (raw in listOf("NOT OK", "OKAY", "OK\rCAN ERROR", "STOPPED\rOK", "?\rOK", "OK\r4100FFFFFFFF")) {

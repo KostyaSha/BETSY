@@ -630,14 +630,24 @@ that the ECU contains no recorded faults.
 
 
 The generic DTC reader checks the ATH1 acknowledgement before issuing `$03`/`$07`.
-ATH1 and ATH0 each require a complete trimmed `OK` response (case-insensitive), with no
-additional retries. An unconfirmed ATH1 skips that generic request and creates an error note.
+ATH1 and ATH0 each require one standalone `OK` line (case-insensitive), allowing whitespace
+and an optional leading echo of the current command, with no additional retries. An unconfirmed ATH1 skips that generic request and creates an error note.
 ATH0 restoration is attempted even if enabling headers failed. A rejected restoration or
 transport exception is reported separately without hiding the original error or discarding
 an already decoded generic result. AT acknowledgements are never stored as ECU replies.
-A failed ATH0 does not confirm the format for subsequent reads; reconnect or restore the
-adapter configuration before trusting later headerless reads. This change reports the error;
-it does not add automatic recovery or block all subsequent sweep requests.
+An attempted ATH1, ATH0, or ATZ invalidates the headerless response format before transport I/O.
+Until a standalone ATH0 acknowledgement confirms it again, block normalized reads and raw
+headerless liveness/freeze reads before transmission. Clear latest-response evidence for a blocked
+request so an earlier AT reply cannot be recorded as its ECU response. The check and exchange
+share the session lock. Existing application setup remains required; this tracks changes during
+the session and does not discover an adapter's initial configuration.
+
+Already decoded DTCs and format-restoration notes remain available. Generic reads whose parser
+explicitly handles CAN headers and AT control exchanges remain possible. If the existing next
+generic read restores ATH0 successfully, later freeze/INF reads may proceed; otherwise they
+record format errors without transmitting. Shared battery polling also uses the normalized guard.
+No automatic recovery, extra retries, or new ECU requests are added. A reset banner alone does
+not restore permission for headerless reads; normal configuration must confirm ATH0.
 
 Generic `$03`/`$07` parsing with ATH1 requires exactly one matching `7EA` single-frame
 line. If additional `7EA` lines arrive, the reader retains the entire raw exchange and reports

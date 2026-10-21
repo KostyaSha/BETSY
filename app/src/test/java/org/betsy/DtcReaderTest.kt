@@ -696,6 +696,45 @@ class DtcReaderTest {
     }
 
     @Test
+    fun failedHeaderRestorationSkipsFreezeAndInfButRetainsReadDtcReplies() {
+        val dtc = "7EA 04 43 01 0A A6"
+        val t = FakeTransport(gen2Base(mapOf("ATH0" to "?", "03" to dtc)))
+        val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+        assertEquals(listOf("P0AA6"), result.storedGenericDtcs.map { it.code })
+        assertEquals(dtc, result.rawResponses.getValue("7E2/03"))
+        assertTrue(result.enhancedDtcReadsComplete)
+        assertFalse(t.commands.any { it.startsWith("02") || it.startsWith("21C") })
+        assertEquals(0, result.infTablesResponded)
+        assertTrue(result.infCodes.isEmpty())
+        assertFalse(result.rawResponses.keys.any { it.startsWith("7E2/02") || it.startsWith("7E2/21C") })
+        assertTrue(result.notes.any { it.contains("Freeze frame") && it.contains("ATH0") })
+        assertTrue(result.notes.any { it.contains("INF") && it.contains("ATH0") })
+    }
+
+    @Test
+    fun laterConfirmedRestorationAllowsFreezeAndInfInTheSameSweep() {
+        val base = FakeTransport(gen2Base())
+        var restorations = 0
+        val transport =
+            object : ElmTransport {
+                override var readTimeoutMs = 2500
+
+                override suspend fun send(cmd: String): String {
+                    val response = base.send(cmd)
+                    return if (cmd == "ATH0" && ++restorations == 1) "?" else response
+                }
+
+                override fun close() {}
+            }
+        val result = awaitBlocking { reader(transport, VehicleModel.GEN2).read() }
+        assertEquals(2, restorations)
+        assertTrue(base.commands.contains("020000"))
+        assertTrue(base.commands.contains("21CA"))
+        assertEquals(5, result.infTablesResponded)
+        assertTrue(result.notes.any { it.contains("restoring ATH0") })
+    }
+
+    @Test
     fun rejectedAth0IsReportedWithoutDiscardingTheDtcReply() {
         for (raw in listOf("?", "NO DATA", "NOT OK", "")) {
             val dtc = "7EA 04 43 01 0A A6"
