@@ -294,6 +294,12 @@ faster.
 
 ---
 
+The supplemental `010C0D` read is optional. A complete ECU refusal, NO DATA, or a malformed
+speed/RPM response records a `010C0D skipped` capture entry and preserves the previous two
+values; a successfully decoded battery cycle still completes. Transport/session failures and
+invalid primary battery data remain failures. This does not add response-pending retries or
+suppress connection errors.
+
 ## 7. Trouble codes and INF detail codes
 
 ### 7.1 Reading DTCs
