@@ -354,12 +354,15 @@ Before Gen2 / Gen2-on-7E2 DTC or INF reads, the app sends `ATSH7E2` then `0100` 
 
 | Adapter / ECU output | ECU alive? | UI / result detail |
 |---|---|---|
-| Normalized response starts with `41` | yes | Responding |
-| Normalized response starts with `7F` | yes | Negative response + NRC meaning |
+| Complete `4100` + four supported-PID mask bytes | yes | Responding |
+| Complete `7F01<NRC>` for the requested service | yes | Negative response + NRC meaning |
 | `NO DATA` / `CAN ERROR` / `BUS ERROR` | no | No response (NO DATA) |
 | Transport timeout | no | No response (timeout) |
 | `?` / `STOPPED` / `UNABLE TO CONNECT` | no | Adapter error |
-| Other hex | no | Unexpected response |
+| Truncated `41`/`7F`, another PID/service, or other hex | no | Unexpected response |
+
+The raw probe response is retained even when it is incomplete or belongs to another PID/service.
+This validates the single mode-01 probe; it is not full vehicle identification.
 
 A clean "no DTCs" result is only meaningful if liveness says the ECU is responding.
 

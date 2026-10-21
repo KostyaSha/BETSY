@@ -223,6 +223,32 @@ class DtcReaderTest {
         assertTrue(result.liveness!!.detail.contains("7F"))
     }
 
+    @Test
+    fun livenessRejectsEveryTruncatedMode01MaskAndKeepsRaw() {
+        val complete = "4100981A8013"
+        for (length in complete.indices) {
+            val raw = complete.take(length)
+            val t = FakeTransport(gen2Base(mapOf("0100" to raw)))
+            val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+            assertFalse("truncated $raw", result.liveness!!.responding)
+            assertTrue(result.liveness!!.detail.startsWith("Unexpected response:"))
+            assertEquals(raw, result.rawResponses.getValue("7E2/0100"))
+            assertEquals(1, t.commands.count { it == "0100" })
+        }
+    }
+
+    @Test
+    fun livenessRejectsWrongPidAndIncompleteOrUnrelatedRefusals() {
+        for (raw in listOf("410100000000", "4120981A8013", "410C0000", "7F", "7F01", "7F011", "7F0211", "7F2211")) {
+            val t = FakeTransport(gen2Base(mapOf("0100" to raw)))
+            val result = awaitBlocking { reader(t, VehicleModel.GEN2).read() }
+            assertFalse(raw, result.liveness!!.responding)
+            assertEquals(null, result.liveness!!.negativeResponse)
+            assertTrue(result.liveness!!.detail.startsWith("Unexpected response:"))
+            assertEquals(raw, result.rawResponses.getValue("7E2/0100"))
+        }
+    }
+
     /** One probe, one round trip: 21C6 is read only by the INF sweep, never as a liveness check. */
     @Test
     fun livenessCostsExactlyOneRequest() {

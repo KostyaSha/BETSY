@@ -72,7 +72,7 @@ fun interface SweepProgress {
 
 /**
  * Result of the 7E2 liveness probe (`0100`). [responding] is true only when the ECU itself
- * answered: positive mode-01 (`41…`) or a negative response (`7F…`). Adapter text and unexpected
+ * answered: complete mode-01 PID-00 (`4100` + four mask bytes) or `7F01<NRC>`. Adapter text and unexpected
  * hex are not "alive."
  */
 data class EcuLiveness(
@@ -321,11 +321,11 @@ class DtcReader(
      * extended masks up to `0140`. Generic mode 01 is implemented here, so one probe is enough and
      * an earlier `21C6` fallback has been removed rather than left in as an untested hedge.
      *
-     * Only `41…` (positive) or `7F…` (negative response) means the ECU itself answered. Adapter
+     * Only a complete `4100` mask or `7F01<NRC>` confirms this probe. Adapter
      * status text and unexpected hex are not "alive".
      */
     private suspend fun checkLiveness(raws: MutableMap<String, String>): EcuLiveness =
-        probeLiveness("7E2", "0100", raws) { it.startsWith("41") }
+        probeLiveness("7E2", "0100", raws) { it.startsWith("4100") && it.length >= 12 }
 
     /**
      * Sends one liveness request under [header] and classifies the reply. [positive] tests the
@@ -381,14 +381,9 @@ class DtcReader(
         if (positive(norm)) {
             return EcuLiveness(header, true, "Responding")
         }
-        if (norm.startsWith("7F")) {
-            val nr = NegativeResponse.parse(norm)
-            val detail =
-                if (nr != null) {
-                    "Negative response: 7F ${nr.service} ${"%02X".format(nr.nrc)} (${nr.meaning})"
-                } else {
-                    "Negative response: $norm"
-                }
+        val nr = NegativeResponse.parse(norm)
+        if (nr != null && nr.service == "01") {
+            val detail = "Negative response: 7F ${nr.service} ${"%02X".format(nr.nrc)} (${nr.meaning})"
             return EcuLiveness(header, true, detail, nr)
         }
         return EcuLiveness(header, false, "Unexpected response: $trimmed")
