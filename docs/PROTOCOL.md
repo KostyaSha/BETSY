@@ -294,6 +294,12 @@ faster.
 
 ---
 
+The battery monitor shows a waiting status before the first successful battery cycle. If the
+primary read returns NO DATA, fails decoding, or has a connection error, it immediately marks
+the displayed values as not updated instead of silently leaving them on screen. Existing values
+are retained for reference. The next successful cycle clears that warning and renders fresh
+battery values. Existing repeated-failure stop thresholds are unchanged.
+
 The supplemental `010C0D` read is optional. A complete ECU refusal, NO DATA, or a malformed
 speed/RPM response records a `010C0D skipped` capture entry and preserves the previous two
 values; a successfully decoded battery cycle still completes. Transport/session failures and
